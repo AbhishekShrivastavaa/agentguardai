@@ -8,7 +8,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-const API = "http://127.0.0.1:8001";
+const API = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8001").replace(/\/$/, "");
 
 export default function Playground() {
   const [prompt, setPrompt] = useState("");

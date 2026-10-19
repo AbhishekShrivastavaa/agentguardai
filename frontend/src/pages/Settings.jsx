@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { getBackendHealth } from "../services/api";
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8001").replace(/\/$/, "");
+
 export default function Settings() {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -112,7 +114,7 @@ export default function Settings() {
             <div className="rounded-xl border border-slate-800 p-4">
               <p className="text-sm text-slate-400">Backend URL</p>
               <p className="mt-2 break-all font-mono text-sm">
-                http://127.0.0.1:8001
+                {API_BASE_URL}
               </p>
             </div>
 
