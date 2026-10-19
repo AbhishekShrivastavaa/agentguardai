@@ -11,9 +11,8 @@ import { useAuth } from "./src/context/AuthContext.jsx";
 import { createInventoryItem, createPolicy, deletePolicy, evaluateAgentAction, getBackendHealth, getGatewayPolicyConfig, getInventory, getPolicies, getSecurityEvents, reviewAgentAction, saveGatewayPolicyConfig, scanPrompt, updateInventoryItem, updatePolicy } from "./src/services/api.js";
 
 const NAV = [
-  { label: "OVERVIEW", items: [["Dashboard", LayoutDashboard], ["Investigations", Eye], ["Security Events", Activity], ["Analytics", SlidersHorizontal]] },
-  { label: "AI INVENTORY", items: [["Agents", Bot], ["MCP Servers", Server], ["Tools", Wrench], ["Workflows", Workflow]] },
-  { label: "GATEWAY", items: [["Action Gateway", ShieldAlert], ["Playground", Sparkles], ["Policies", ShieldCheck], ["API Keys", KeyRound], ["Settings", SettingsIcon]] },
+  { label: "PRESENTATION", items: [["Dashboard", LayoutDashboard], ["Playground", Sparkles], ["Security Events", Activity]] },
+  { label: "CONTROLS", items: [["Policies", ShieldCheck], ["Agents", Bot]] },
 ];
 
 const DEMO_AGENTS = [
@@ -85,84 +84,39 @@ function EventTable({ events, onSelect, compact = false }) {
 }
 
 function Dashboard({ events, health, onNavigate, onRefresh, loading, agents, currentUser }) {
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("All assets");
-  const [riskFilter, setRiskFilter] = useState("All risks");
   const [selectedGeo, setSelectedGeo] = useState("All regions");
   const worldRegions = [["Australia", 8006, "AU", "cyan"], ["Denmark", 6534, "DK", "violet"], ["Brazil", 3231, "BR", "blue"], ["India", 2115, "IN", "mint"]];
   const worldTotal = worldRegions.reduce((sum, region) => sum + region[1], 0);
   const blocked = events.filter((e) => ["BLOCKED", "OUTPUT_BLOCKED"].includes(String(e.status).toUpperCase())).length;
   const flagged = events.filter((e) => String(e.status).toUpperCase() === "FLAGGED").length;
-  const allowed = events.filter((e) => ["ALLOWED", "ACTION_ALLOWED", "APPROVED"].includes(String(e.status).toUpperCase())).length;
-  const avgRisk = events.length ? Math.round(events.reduce((sum, e) => sum + Number(e.risk_score || 0), 0) / events.length) : 0;
-  const highRisk = events.filter((e) => Number(e.risk_score || 0) >= 70).length;
-  const filteredAgents = agents.filter((agent) => agent.name.toLowerCase().includes(search.toLowerCase()) && (riskFilter === "All risks" || agent.risk === riskFilter));
-  const bars = useMemo(() => {
-    const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); d.setHours(0, 0, 0, 0); return { date: d, label: d.toLocaleDateString(undefined, { weekday: "short" }), total: 0, blocked: 0 }; });
-    events.forEach((event) => { const date = new Date(event.timestamp); if (Number.isNaN(date.getTime())) return; date.setHours(0, 0, 0, 0); const day = days.find((d) => d.date.getTime() === date.getTime()); if (day) { day.total += 1; if (["BLOCKED", "OUTPUT_BLOCKED"].includes(String(event.status).toUpperCase())) day.blocked += 1; } });
-    return days;
-  }, [events]);
-  const maxBars = Math.max(1, ...bars.map((b) => b.total));
-  const mapAgents = typeFilter === "MCP servers" ? [] : filteredAgents.slice(0, 5);
-  const recommendations = [
-    blocked > 0 && { title: `Review ${blocked} blocked request${blocked === 1 ? "" : "s"}`, text: "Investigate the latest gateway decisions and confirm policy coverage.", action: "Open investigations", page: "Investigations", icon: ShieldAlert },
-    agents.some((agent) => agent.risk === "High") && { title: "Tighten agent privileges", text: "A demo agent is marked high risk. Review its runtime policy and tool scope.", action: "Review agents", page: "Agents", icon: ShieldCheck },
-    { title: "Inspect connected tool access", text: "Review MCP servers and the tools they expose to agent workflows.", action: "Review integrations", page: "MCP Servers", icon: Network },
-  ].filter(Boolean);
   return <>
-    <PageHeading eyebrow="AGENT GATEWAY · SECURITY POSTURE" title="All agents" description="Monitor your AI agents, tool access and live security decisions from one gateway." action={<div className="heading-actions"><button className="button secondary" onClick={() => onNavigate("Workflows")}><Workflow size={15} /> Start workflow</button><button className="button primary" onClick={() => onNavigate("Agents")}><Plus size={16} /> Register agent</button></div>} />
-    <div className="inventory-toolbar surface"><div className="search-field"><Search size={15} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search agents or integrations" /></div><label>Asset<select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option>All assets</option><option>Agents</option><option>MCP servers</option></select></label><label>Risk<select value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}><option>All risks</option><option>High</option><option>Medium</option><option>Low</option></select></label><button className="text-button" onClick={() => { setSearch(""); setTypeFilter("All assets"); setRiskFilter("All risks"); }}>Reset</button><span className="demo-indicator"><i /> Demo inventory</span></div>
+    <PageHeading eyebrow="PRESENTATION OVERVIEW" title="AI security gateway" description="Follow a request through inspection, policy enforcement and the audit log." action={<div className="heading-actions"><button className="button secondary" onClick={() => onNavigate("Policies")}><ShieldCheck size={15} /> View policy</button><button className="button primary" onClick={() => onNavigate("Playground")}><Sparkles size={15} /> Run a demo</button></div>} />
     <section className="dashboard-hero surface">
       <div className="hero-copy">
         <div className="hero-kicker"><span className="hero-live-dot" /> INLINE AI SECURITY <span className="hero-kicker-divider">/</span> ZERO TRUST</div>
         <h2>Every agent action.<br /><em>Inspected before it runs.</em></h2>
         <p>AgentGuard sits between your AI client and model provider, checking prompts, sensitive data, tool calls and responses at the gateway.</p>
         <div className="hero-actions"><button className="button primary" onClick={() => onNavigate("Playground")}><Sparkles size={15} /> Try attack simulator</button><button className="hero-link" onClick={() => onNavigate("Policies")}>Configure security policy <ArrowUpRight size={14} /></button></div>
-        <div className="hero-proof"><span><CheckCircle2 size={14} /> Five stage inspection</span><span><CheckCircle2 size={14} /> Explainable decisions</span><span><CheckCircle2 size={14} /> Audited outcomes</span></div>
+        <div className="hero-proof"><span><CheckCircle2 size={14} /> Five checks</span><span><CheckCircle2 size={14} /> Four outcomes</span><span><CheckCircle2 size={14} /> Audit trail</span></div>
       </div>
       <div className="hero-flow" aria-label="Request flow from AI client through AgentGuard to model provider">
         <div className="hero-flow-label">INLINE REQUEST FLOW <span>LIVE GATEWAY</span></div>
         <div className="hero-flow-track"><div className="hero-endpoint"><span><Code2 size={17} /></span><strong>AI client</strong><small>Chat / agent</small></div><div className="hero-connection"><i /><i /><i /></div><button className="hero-gateway" onClick={() => onNavigate("Playground")}><span><ShieldCheck size={23} /></span><strong>AgentGuard</strong><small>Policy enforcement</small><b>{health === "healthy" ? "OPERATIONAL" : "CHECK CONNECTION"}</b></button><div className="hero-connection"><i /><i /><i /></div><div className="hero-endpoint model"><span><Sparkles size={17} /></span><strong>Model provider</strong><small>Protected route</small></div></div>
-        <div className="hero-inspection"><span><i /> Normalize</span><span><i /> Injection</span><span><i /> DLP</span><span><i /> Sandbox</span><span><i /> Verdict</span></div>
+        <div className="hero-inspection"><span><i /> Normalize</span><span><i /> Prompt scan</span><span><i /> Data masking</span><span><i /> Tool safety</span><span><i /> Policy</span></div>
       </div>
     </section>
     <div className="metric-grid dashboard-metrics">
-      <MetricCard icon={CircleHelp} label="Signed-in user" value="1" note={`${currentUser?.username || "Current account"}`} tone="violet" />
-      <MetricCard icon={Bot} label="Agents monitored" value={agents.length} note="Local demo registry" tone="violet" />
-      <MetricCard icon={Server} label="MCP servers" value={MCP_SERVERS.length} note="Demo catalog" tone="green" />
-      <MetricCard icon={Wrench} label="Tools inventoried" value={DEMO_TOOLS.length} note="Demo catalog" tone="amber" />
-      <MetricCard icon={Activity} label="Gateway scans" value={events.length} note="Persisted events" />
-      <MetricCard icon={ShieldAlert} label="Threats blocked" value={blocked} note={`${highRisk} high-risk events`} tone="rose" />
+      <MetricCard icon={Activity} label="Requests inspected" value={events.length} note="This demo workspace" />
+      <MetricCard icon={ShieldAlert} label="Blocked" value={blocked} note="Unsafe requests stopped" tone="rose" />
+      <MetricCard icon={Eye} label="Redacted" value={events.filter((event) => ["REDACTED", "OUTPUT_REDACTED"].includes(String(event.status).toUpperCase())).length} note="Sensitive data masked" tone="amber" />
+      <MetricCard icon={CircleHelp} label="Flagged for review" value={flagged} note="Human review recommended" tone="violet" />
     </div>
-    <div className="overview-grid">
-      <section className="surface topology-surface">
-        <div className="surface-heading"><div><h2>Agent gateway map</h2><p>Agent to gateway to sanctioned tools · demo inventory topology</p></div><button className="text-button" onClick={() => onNavigate("Agents")}>View inventory <ArrowUpRight size={14} /></button></div>
-        <div className="topology-legend"><span><i className="legend-agent" />AI agents</span><span><i className="legend-gateway" />AgentGuard gateway</span><span><i className="legend-server" />MCP servers</span><span className="topology-live"><i />{health === "healthy" ? "Gateway online" : "Gateway offline"}</span></div>
-        <div className="topology-canvas">
-          <svg className="topology-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="49" y1="50" x2="18" y2="18" /><line x1="49" y1="50" x2="15" y2="50" /><line x1="49" y1="50" x2="18" y2="82" /><line x1="49" y1="50" x2="36" y2="13" /><line x1="49" y1="50" x2="36" y2="87" /><line x1="51" y1="50" x2="82" y2="20" /><line x1="51" y1="50" x2="86" y2="50" /><line x1="51" y1="50" x2="82" y2="80" /></svg>
-          {mapAgents.map((agent, i) => <button key={agent.id} className={`topology-node agent-node risk-${agent.risk.toLowerCase()}`} style={{ left: ["18%", "15%", "18%", "36%", "36%"][i], top: ["18%", "50%", "82%", "13%", "87%"][i] }} onClick={() => onNavigate("Agents")}><span className="node-avatar"><Bot size={15} /></span><span><strong>{agent.name}</strong><small>{agent.risk} risk · Agent</small></span></button>)}
-          <button className="topology-node gateway-map-node" onClick={() => onNavigate("Playground")}><span className="gateway-map-icon"><ShieldCheck size={20} /></span><span><strong>AgentGuard</strong><small>Inline policy gateway</small></span><span className="gateway-pulse" /></button>
-          {(typeFilter !== "Agents" ? MCP_SERVERS.slice(0, 3) : []).map((server, i) => <button key={server.name} className="topology-node server-node" style={{ left: ["82%", "86%", "82%"][i], top: ["20%", "50%", "80%"][i] }} onClick={() => onNavigate("MCP Servers")}><span className="server-avatar">{server.icon}</span><span><strong>{server.name}</strong><small>{server.state} · MCP</small></span></button>)}
-          {!filteredAgents.length && typeFilter !== "MCP servers" && <div className="topology-empty">No agents match these filters.</div>}
-        </div>
-        <div className="topology-footnote"><ShieldCheck size={14} />Live gateway status is real. Agent and integration nodes are editable demo inventory, not connected service telemetry.</div>
-      </section>
-      <aside className="surface recommendations-surface"><div className="surface-heading"><div><h2>Recommended actions</h2><p>Next steps from gateway posture</p></div><span className="recommendation-count">{recommendations.length}</span></div>
-        <div className="recommendation-list">{recommendations.map((item) => <article className="recommendation-card" key={item.title}><span className="recommendation-icon"><item.icon size={16} /></span><div><h3>{item.title}</h3><p>{item.text}</p><button onClick={() => onNavigate(item.page)}>{item.action}<ArrowUpRight size={13} /></button></div></article>)}</div>
-        <div className="gateway-health-mini"><span className={`health-indicator ${health === "healthy" ? "online" : "offline"}`} /><div><strong>{health === "healthy" ? "Gateway operational" : "Gateway unavailable"}</strong><small>FastAPI policy and scan service</small></div><button className="icon-action" title="Refresh gateway health" onClick={onRefresh} disabled={loading}><RefreshCw size={14} className={loading ? "spin" : ""} /></button></div>
-      </aside>
-    </div>
-    <div className="dashboard-lower-grid">
-      <section className="surface activity-surface"><div className="surface-heading"><div><h2>Gateway activity</h2><p>Scans and blocked requests · last seven days</p></div><span className="period-tag">LAST 7 DAYS</span></div>
-        {events.length ? <div className="activity-chart" role="img" aria-label="Security events by day for the last seven days">{bars.map((bar) => <div className="chart-day" key={bar.label}><div className="bar-track"><div className="bar-total" style={{ height: `${Math.max(bar.total ? 9 : 0, (bar.total / maxBars) * 100)}%` }}><span className="bar-blocked" style={{ height: `${bar.total ? (bar.blocked / bar.total) * 100 : 0}%` }} /></div></div><span>{bar.label}</span><small>{bar.total}</small></div>)}</div> : <EmptyState icon={Activity} title="Waiting for first scan" description="Real gateway activity appears here when requests run through AgentGuard." action={<button className="button secondary" onClick={() => onNavigate("Playground")}>Open playground</button>} />}
-        <div className="chart-legend"><span><i className="legend-requests" />Scans</span><span><i className="legend-blocked" />Blocked</span></div>
-      </section>
-      <section className="surface global-threat-surface"><div className="surface-heading"><div className="map-heading"><span className="map-heading-icon"><Network size={16} /></span><span><h2>Global activity map</h2><p>Regional request distribution · illustrative telemetry</p></span></div><span className="map-sample-tag"><i /> DEMO FEED</span></div>
-        <div className="world-map-toolbar"><div><strong>{worldTotal.toLocaleString()}</strong><span>sample requests</span></div><div className="world-map-legend"><span><i className="legend-map-request" />Request volume</span><span><i className="legend-map-hub" />AgentGuard hub</span></div><button className="map-period-button" onClick={() => setSelectedGeo("All regions")}>30 days <ChevronDown size={12} /></button></div>
+          <section className="surface global-threat-surface"><div className="surface-heading"><div className="map-heading"><span className="map-heading-icon"><Network size={16} /></span><span><h2>Global threat map</h2><p>Illustrative demo geography · not live client locations</p></span></div><span className="map-sample-tag"><i /> DEMO DATA</span></div>
+        <div className="world-map-toolbar"><div><strong>{worldTotal.toLocaleString()}</strong><span>illustrative demo events</span></div><div className="world-map-legend"><span><i className="legend-map-request" />Demo regions</span><span><i className="legend-map-hub" />AgentGuard gateway</span></div><span className="map-period-button">Sample view</span></div>
         <div className="world-map-layout">
           <div className="world-map-visual">
             <svg className="world-map-svg" viewBox="0 0 600 300" role="img" aria-label="Illustrative world map with demo activity markers">
-              <defs><pattern id="map-grid" width="40" height="30" patternUnits="userSpaceOnUse"><path d="M40 0H0V30" fill="none" stroke="#23404a" strokeWidth="1" opacity=".45" /></pattern><radialGradient id="map-glow"><stop stopColor="#24c4d5" stopOpacity=".22" /><stop offset="1" stopColor="#24c4d5" stopOpacity="0" /></radialGradient><linearGradient id="land-fill" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#28515b" /><stop offset="1" stopColor="#17313d" /></linearGradient></defs>
+              <defs><pattern id="map-grid" width="40" height="30" patternUnits="userSpaceOnUse"><path d="M40 0H0V30" fill="none" stroke="#23404a" strokeWidth="1" opacity=".45" /></pattern><radialGradient id="map-glow"><stop stopColor="#9185e8" stopOpacity=".22" /><stop offset="1" stopColor="#9185e8" stopOpacity="0" /></radialGradient><linearGradient id="land-fill" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#34364b" /><stop offset="1" stopColor="#222637" /></linearGradient></defs>
               <rect width="600" height="300" fill="url(#map-grid)" />
               <ellipse cx="300" cy="150" rx="282" ry="135" fill="url(#map-glow)" />
               <g className="world-graticule"><ellipse cx="300" cy="150" rx="130" ry="140" /><ellipse cx="300" cy="150" rx="250" ry="140" /><path d="M18 150h564M34 102h532M34 198h532" /></g>
@@ -175,17 +129,18 @@ function Dashboard({ events, health, onNavigate, onRefresh, loading, agents, cur
           </div>
           <div className="world-region-list">{worldRegions.map(([name, count, code, tone]) => <button className={"world-region-row " + (selectedGeo === name ? "active" : "")} key={code} onClick={() => setSelectedGeo(selectedGeo === name ? "All regions" : name)}><span className={"region-dot " + tone} /><span className="region-code">{code}</span><span>{name}</span><strong>{count.toLocaleString()}</strong><i className="region-volume"><b style={{ width: (count / 8006 * 100) + "%" }} /></i></button>)}</div>
         </div>
-        <div className="map-data-note"><Shield size={12} /><span><strong>Demo geography</strong> · source IP geolocation is not yet collected by the live gateway.</span><button onClick={() => onNavigate("Analytics")}>View activity <ArrowUpRight size={12} /></button></div>
+        <div className="map-data-note"><Shield size={12} /><span><strong>Demo geography</strong> · source IP geolocation is not yet collected by the live gateway.</span><button onClick={() => onNavigate("Security Events")}>Open audit log <ArrowUpRight size={12} /></button></div>
       </section>
-      <section className="surface risk-surface"><div className="surface-heading"><div><h2>Risk by application</h2><p>Risk scores from real gateway events</p></div><button className="text-button" onClick={() => onNavigate("Analytics")}>Details <ArrowUpRight size={13} /></button></div>
-        {[{ label: "High · 70–100", value: events.filter((e) => Number(e.risk_score || 0) >= 70).length, color: "risk-high" }, { label: "Medium · 30–69", value: events.filter((e) => Number(e.risk_score || 0) >= 30 && Number(e.risk_score || 0) < 70).length, color: "risk-medium" }, { label: "Low · 0–29", value: events.filter((e) => Number(e.risk_score || 0) < 30).length, color: "risk-low" }].map((row) => <div className="risk-bar-row" key={row.label}><div><span>{row.label}</span><strong>{row.value}</strong></div><div className="risk-bar-track"><i className={row.color} style={{ width: `${events.length ? Math.max(3, row.value / events.length * 100) : 0}%` }} /></div></div>)}
-        <div className="risk-summary"><span className="risk-donut" style={{ "--risk-blocked": `${events.length ? blocked / events.length * 100 : 0}%` }}><b>{events.length}</b></span><div><strong>{events.length ? Math.round(blocked / events.length * 100) : 0}%</strong><small>blocked request rate</small><em>{allowed} allowed · {flagged} flagged</em></div></div>
-      </section>
-      <section className="surface event-types-surface"><div className="surface-heading"><div><h2>Event types</h2><p>Detection and response summary</p></div><button className="text-button" onClick={() => onNavigate("Security Events")}>View all <ArrowUpRight size={13} /></button></div>
-        <div className="event-type-list">{[["Prompt injection", events.filter((e) => (e.reasons || []).some((r) => /injection|instruction/i.test(r))).length, "danger"], ["Sensitive data", events.filter((e) => (e.reasons || []).some((r) => /PII|sensitive|credential/i.test(r))).length, "warning"], ["Policy decisions", events.filter((e) => ["ALLOWED", "FLAGGED"].includes(String(e.status).toUpperCase())).length, "success"], ["Output scans", events.filter((e) => String(e.status).toUpperCase() === "OUTPUT_BLOCKED").length, "violet"]].map(([label, value, tone]) => <div className="event-type-row" key={label}><i className={tone} /><span>{label}</span><strong>{value}</strong></div>)}</div>
-      </section>
-    </div>
-    <section className="surface recent-surface"><div className="surface-heading"><div><h2>Recent investigations</h2><p>Latest live gateway decisions · inventory filters match {filteredAgents.length} agents</p></div><button className="text-button" onClick={() => onNavigate("Investigations")}>Open investigations <ArrowUpRight size={14} /></button></div><EventTable events={events.slice(0, 5)} compact /></section>
+    <section className="surface verdict-explainer">
+      <div className="surface-heading"><div><h2>Four clear outcomes</h2><p>What the gateway does after inspection</p></div></div>
+      <div className="verdict-grid">
+        <article><span className="verdict-dot allowed" /><div><strong>Allow</strong><small>Request passes policy</small></div></article>
+        <article><span className="verdict-dot redact" /><div><strong>Redact</strong><small>Mask sensitive data</small></div></article>
+        <article><span className="verdict-dot block" /><div><strong>Block</strong><small>Stop unsafe requests</small></div></article>
+        <article><span className="verdict-dot review" /><div><strong>Review</strong><small>Flag for human review</small></div></article>
+      </div>
+    </section>
+    <section className="surface recent-surface"><div className="surface-heading"><div><h2>Recent security decisions</h2><p>Each decision includes the reason and risk score.</p></div><button className="text-button" onClick={() => onNavigate("Security Events")}>Open audit log <ArrowUpRight size={14} /></button></div><EventTable events={events.slice(0, 5)} compact /></section>
   </>;
 }
 
