@@ -32,7 +32,7 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         env:
-          VITE_API_URL: https://agentguard-ai-manav1234-api.onrender.com
+          VITE_API_URL: https://agentguardai-api.onrender.com
           VITE_BASE_PATH: /agentguardai/
           GITHUB_ACTIONS: "true"
         run: npm run build

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: agentguard-ai-manav1234-api
+    name: agentguardai-api
     runtime: python
     plan: free
     rootDir: backend
