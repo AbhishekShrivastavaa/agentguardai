@@ -112,6 +112,20 @@ function Dashboard({ events, health, onNavigate, onRefresh, loading, agents, cur
   return <>
     <PageHeading eyebrow="AGENT GATEWAY · SECURITY POSTURE" title="All agents" description="Monitor your AI agents, tool access and live security decisions from one gateway." action={<div className="heading-actions"><button className="button secondary" onClick={() => onNavigate("Workflows")}><Workflow size={15} /> Start workflow</button><button className="button primary" onClick={() => onNavigate("Agents")}><Plus size={16} /> Register agent</button></div>} />
     <div className="inventory-toolbar surface"><div className="search-field"><Search size={15} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search agents or integrations" /></div><label>Asset<select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option>All assets</option><option>Agents</option><option>MCP servers</option></select></label><label>Risk<select value={riskFilter} onChange={(e) => setRiskFilter(e.target.value)}><option>All risks</option><option>High</option><option>Medium</option><option>Low</option></select></label><button className="text-button" onClick={() => { setSearch(""); setTypeFilter("All assets"); setRiskFilter("All risks"); }}>Reset</button><span className="demo-indicator"><i /> Demo inventory</span></div>
+    <section className="dashboard-hero surface">
+      <div className="hero-copy">
+        <div className="hero-kicker"><span className="hero-live-dot" /> INLINE AI SECURITY <span className="hero-kicker-divider">/</span> ZERO TRUST</div>
+        <h2>Every agent action.<br /><em>Inspected before it runs.</em></h2>
+        <p>AgentGuard sits between your AI client and model provider, checking prompts, sensitive data, tool calls and responses at the gateway.</p>
+        <div className="hero-actions"><button className="button primary" onClick={() => onNavigate("Playground")}><Sparkles size={15} /> Try attack simulator</button><button className="hero-link" onClick={() => onNavigate("Policies")}>Configure security policy <ArrowUpRight size={14} /></button></div>
+        <div className="hero-proof"><span><CheckCircle2 size={14} /> Five stage inspection</span><span><CheckCircle2 size={14} /> Explainable decisions</span><span><CheckCircle2 size={14} /> Audited outcomes</span></div>
+      </div>
+      <div className="hero-flow" aria-label="Request flow from AI client through AgentGuard to model provider">
+        <div className="hero-flow-label">INLINE REQUEST FLOW <span>LIVE GATEWAY</span></div>
+        <div className="hero-flow-track"><div className="hero-endpoint"><span><Code2 size={17} /></span><strong>AI client</strong><small>Chat / agent</small></div><div className="hero-connection"><i /><i /><i /></div><button className="hero-gateway" onClick={() => onNavigate("Playground")}><span><ShieldCheck size={23} /></span><strong>AgentGuard</strong><small>Policy enforcement</small><b>{health === "healthy" ? "OPERATIONAL" : "CHECK CONNECTION"}</b></button><div className="hero-connection"><i /><i /><i /></div><div className="hero-endpoint model"><span><Sparkles size={17} /></span><strong>Model provider</strong><small>Protected route</small></div></div>
+        <div className="hero-inspection"><span><i /> Normalize</span><span><i /> Injection</span><span><i /> DLP</span><span><i /> Sandbox</span><span><i /> Verdict</span></div>
+      </div>
+    </section>
     <div className="metric-grid dashboard-metrics">
       <MetricCard icon={CircleHelp} label="Signed-in user" value="1" note={`${currentUser?.username || "Current account"}`} tone="violet" />
       <MetricCard icon={Bot} label="Agents monitored" value={agents.length} note="Local demo registry" tone="violet" />
