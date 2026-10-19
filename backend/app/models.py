@@ -77,3 +77,13 @@ class InventoryItem(Base):
     data = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class GatewayConfiguration(Base):
+    """Persisted policy-studio settings; a new table keeps old SQLite DBs compatible."""
+    __tablename__ = "gateway_configuration"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(80), nullable=False, unique=True, index=True)
+    value = Column(JSON, nullable=False, default=dict)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

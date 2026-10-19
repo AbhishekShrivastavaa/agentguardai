@@ -19,31 +19,33 @@ GROQ_BASE_URL = os.getenv(
     "GROQ_BASE_URL",
     "https://api.groq.com/openai/v1",
 ).rstrip("/")
+AGENTGUARD_API_KEY = os.getenv("AGENTGUARD_API_KEY")
 
 
-async def generate_ai_response(
-    prompt: str,
-    system_prompt: str = "You are a helpful assistant.",
-    conversation: list[dict[str, str]] | None = None,
+async def generate_chat_completion(
+    messages: list[dict[str, Any]],
+    *,
+    model: str | None = None,
+    temperature: float = 0.2,
+    max_tokens: int = 1024,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Generate a response from Groq using the inspected chat history."""
-
+    """Call the configured OpenAI-compatible upstream provider."""
     if not GROQ_API_KEY:
-        return {
-            "success": False,
-            "error": "GROQ_API_KEY is missing from backend/.env",
-        }
+        return {"success": False, "error": "The upstream model provider is not configured."}
 
-    payload = {
-        "model": GROQ_MODEL,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            *(conversation or []),
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.2,
-        "max_tokens": 1024,
+    payload: dict[str, Any] = {
+        "model": model or GROQ_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
     }
+    if tools:
+        payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
 
     try:
         async with httpx.AsyncClient(timeout=45.0) as client:
@@ -55,32 +57,40 @@ async def generate_ai_response(
                 },
                 json=payload,
             )
-
         if response.is_error:
-            # Don't expose API keys or raw provider responses.
             return {
                 "success": False,
-                "error": f"Groq API returned HTTP {response.status_code}. "
-                + ("Check the configured model ID and model access." if response.status_code == 404 else "Check provider credentials and account limits."),
+                "error": f"Upstream model provider returned HTTP {response.status_code}.",
             }
+        return {"success": True, "data": response.json()}
+    except httpx.TimeoutException:
+        return {"success": False, "error": "Upstream model provider request timed out."}
+    except (httpx.HTTPError, ValueError, TypeError):
+        return {"success": False, "error": "Upstream model provider request failed."}
 
-        data = response.json()
-        answer = data["choices"][0]["message"]["content"]
 
+async def generate_ai_response(
+    prompt: str,
+    system_prompt: str = "You are a helpful assistant.",
+    conversation: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Generate a response from Groq using the inspected chat history."""
+
+    result = await generate_chat_completion([
+        {"role": "system", "content": system_prompt},
+        *(conversation or []),
+        {"role": "user", "content": prompt},
+    ])
+    if not result["success"]:
+        return result
+    try:
+        data = result["data"]
+        answer = data["choices"][0]["message"]["content"] or ""
         return {
             "success": True,
             "model": data.get("model", GROQ_MODEL),
             "response": answer,
             "usage": data.get("usage", {}),
         }
-
-    except httpx.TimeoutException:
-        return {
-            "success": False,
-            "error": "Groq API request timed out.",
-        }
-    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
-        return {
-            "success": False,
-            "error": "Groq API request failed or returned an invalid response.",
-        }
+    except (KeyError, IndexError, TypeError):
+        return {"success": False, "error": "Upstream model provider returned an invalid response."}

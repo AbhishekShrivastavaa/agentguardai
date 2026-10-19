@@ -1,4 +1,5 @@
 import re
+from urllib.parse import unquote
 from typing import Any
 
 
@@ -18,6 +19,16 @@ PATTERNS = {
         r"AIza[A-Za-z0-9_-]{20,}|"
         r"gh[pousr]_[A-Za-z0-9]{20,})\b"
     ),
+    "GITHUB_TOKEN": re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    "SLACK_TOKEN": re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+    "AWS_SECRET_KEY": re.compile(
+        r"(?i)(?:aws[_-]?)?(?:secret[_-]?access[_-]?key|secret[_-]?key)"
+        r"\s*[:=]\s*['\"]?([A-Za-z0-9/+=]{32,})"
+    ),
+    "PRIVATE_KEY": re.compile(
+        r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"
+        r"[\s\S]{1,8000}?-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"
+    ),
     "AWS_ACCESS_KEY": re.compile(
         r"\bAKIA[0-9A-Z]{16}\b"
     ),
@@ -35,7 +46,7 @@ PATTERNS = {
 }
 
 
-def detect_pii(text: str) -> dict[str, Any]:
+def detect_pii(text: str, enabled_types: dict[str, bool] | None = None) -> dict[str, Any]:
     """Detect common PII and secret patterns in text."""
 
     findings = []
@@ -49,6 +60,8 @@ def detect_pii(text: str) -> dict[str, Any]:
         }
 
     for pii_type, pattern in PATTERNS.items():
+        if enabled_types is not None and not enabled_types.get(pii_type, False):
+            continue
         for match in pattern.finditer(text):
             value = match.group(0)
 
@@ -57,15 +70,41 @@ def detect_pii(text: str) -> dict[str, Any]:
                 digits = re.sub(r"\D", "", value)
                 if not 13 <= len(digits) <= 19:
                     continue
+                # Require a valid Luhn checksum to reduce false positives.
+                total = 0
+                parity = len(digits) % 2
+                for index, char in enumerate(digits):
+                    digit = int(char)
+                    if index % 2 == parity:
+                        digit *= 2
+                        if digit > 9:
+                            digit -= 9
+                    total += digit
+                if total % 10:
+                    continue
 
             findings.append({
                 "type": pii_type,
                 "start": match.start(),
                 "end": match.end(),
-                "masked_value": (
-                    "*" * max(4, len(value) - 4) + value[-4:]
-                ),
+                # Never return matched secret material in scan results.
+                "masked_value": "[REDACTED]",
             })
+
+    # If percent-encoding hid sensitive material, redact the complete encoded
+    # value rather than trying to translate decoded character offsets.
+    decoded = unquote(text)
+    if decoded != text:
+        for pii_type, pattern in PATTERNS.items():
+            if enabled_types is not None and not enabled_types.get(pii_type, False):
+                continue
+            if pattern.search(decoded):
+                findings.append({
+                    "type": pii_type,
+                    "start": 0,
+                    "end": len(text),
+                    "masked_value": "[REDACTED]",
+                })
 
     # Deduplicate identical spans.
     unique = {}
@@ -87,10 +126,10 @@ def detect_pii(text: str) -> dict[str, Any]:
     }
 
 
-def redact_pii(text: str) -> dict[str, Any]:
+def redact_pii(text: str, enabled_types: dict[str, bool] | None = None) -> dict[str, Any]:
     """Return text with detected sensitive values redacted."""
 
-    result = detect_pii(text)
+    result = detect_pii(text, enabled_types)
     redacted = text
 
     # Replace from right to left to preserve character offsets.

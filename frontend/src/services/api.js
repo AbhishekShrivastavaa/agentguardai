@@ -79,13 +79,14 @@ export function logoutUser() {
 }
 
 // AI Security Gateway
-export async function scanPrompt(prompt, useAI = true, conversation = []) {
+export async function scanPrompt(prompt, useAI = true, conversation = [], options = {}) {
   return apiRequest("/gateway/scan", {
     method: "POST",
     body: JSON.stringify({
       prompt,
       use_ai: useAI,
       conversation,
+      ...options,
     }),
   });
 }
@@ -150,6 +151,17 @@ export async function updatePolicy(id, policy) {
 export async function deletePolicy(id) {
   return apiRequest(`/policies/${id}`, {
     method: "DELETE",
+  });
+}
+
+export async function getGatewayPolicyConfig() {
+  return apiRequest("/gateway/policy-config");
+}
+
+export async function saveGatewayPolicyConfig(config) {
+  return apiRequest("/gateway/policy-config", {
+    method: "PUT",
+    body: JSON.stringify(config),
   });
 }
 

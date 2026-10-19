@@ -6,7 +6,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.auth import get_current_user
 from app.models import SecurityPolicy
+from app.gateway_config import get_gateway_config
+from app.security_engine.normalizer import normalize_text
 
 
 policy_router = APIRouter(
@@ -29,6 +32,9 @@ def get_effective_policies(db: Optional[Session] = None) -> dict:
     if db is None:
         return settings
 
+    config = get_gateway_config(db)
+    settings.update({"risk_threshold": config["risk_threshold"], "custom_rules": config["custom_rules"]})
+
     stored = (
         db.query(SecurityPolicy)
         .filter(
@@ -39,8 +45,11 @@ def get_effective_policies(db: Optional[Session] = None) -> dict:
     )
 
     if stored:
-        settings["risk_threshold"] = stored.risk_threshold
         settings["default_action"] = stored.action
+    settings["enabled_policies"] = db.query(SecurityPolicy).filter(
+        SecurityPolicy.enabled.is_(True),
+        SecurityPolicy.name.notin_(["default", "pii"]),
+    ).all()
 
     return settings
 
@@ -48,22 +57,64 @@ def evaluate_policy(
     detection: dict,
     risk: dict,
     db: Optional[Session] = None,
+    text: str = "",
 ) -> dict:
     settings = get_effective_policies(db)
     reasons = []
 
+    flagged = False
     if settings["block_prompt_injection"] and detection.get("detected", False):
-        reasons.append("Prompt injection detected")
+        sensitive_extraction = any(
+            term in reason.lower()
+            for reason in detection.get("reasons", [])
+            for term in ("credential disclosure", "secret extraction", "system prompt extraction")
+        )
+        if sensitive_extraction or settings["default_action"] == "block":
+            reasons.append("Prompt injection detected")
+        elif settings["default_action"] == "flag":
+            flagged = True
+            reasons.append("Prompt injection sent for review by the active policy")
+        elif settings["default_action"] == "redact":
+            # Natural-language instructions cannot be reliably sanitized.
+            reasons.append("Prompt injection cannot be safely sanitized")
 
     threshold = settings["risk_threshold"]
 
     if settings["block_high_risk"] and risk.get("score", 0) >= threshold:
-        reasons.append(
-            f"Risk score meets or exceeds threshold ({threshold})"
-        )
+        if settings["default_action"] == "block":
+            reasons.append(f"Risk score meets or exceeds threshold ({threshold})")
+        elif settings["default_action"] == "flag":
+            flagged = True
+            reasons.append(f"Risk score sent for review at threshold ({threshold})")
+        elif settings["default_action"] == "redact":
+            reasons.append(f"High-risk content cannot be sanitized (threshold {threshold})")
+
+    for policy in settings.get("enabled_policies", []):
+        if risk.get("score", 0) < policy.risk_threshold:
+            continue
+        if policy.action == "block":
+            reasons.append(f"Policy '{policy.name}' blocked this risk score")
+        elif policy.action == "flag":
+            flagged = True
+            reasons.append(f"Policy '{policy.name}' flagged this risk score")
+    normalized_text = normalize_text(text).casefold()
+    for rule in settings.get("custom_rules", []):
+        phrase = str(rule.get("phrase", "")).strip().casefold()
+        if not rule.get("enabled", True) or not phrase or phrase not in normalized_text:
+            continue
+        if rule.get("action") == "block":
+            reasons.append(f"Custom policy phrase matched: {phrase[:48]}")
+        else:
+            flagged = True
+            reasons.append(f"Custom policy flagged request: {phrase[:48]}")
 
     return {
-        "allowed": len(reasons) == 0,
+        "allowed": not any(
+            reason.startswith(("Prompt injection", "Risk score", "High-risk", "Policy '", "Custom policy phrase"))
+            and "flagged" not in reason.lower() and "sent for review" not in reason.lower()
+            for reason in reasons
+        ),
+        "flagged": flagged,
         "reasons": reasons,
         "risk_threshold": threshold,
         "action": settings["default_action"],
@@ -84,7 +135,7 @@ class PolicyUpdate(BaseModel):
 
 
 @policy_router.get("/")
-def list_policies(db: Session = Depends(get_db)):
+def list_policies(_current_user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     policies = db.query(SecurityPolicy).order_by(
         SecurityPolicy.id
     ).all()
@@ -108,6 +159,7 @@ def list_policies(db: Session = Depends(get_db)):
 @policy_router.post("/", status_code=201)
 def create_policy(
     request: PolicyCreate,
+    _current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     existing = db.query(SecurityPolicy).filter(
@@ -143,6 +195,7 @@ def create_policy(
 def update_policy(
     policy_id: int,
     request: PolicyUpdate,
+    _current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     policy = db.query(SecurityPolicy).filter(
@@ -175,6 +228,7 @@ def update_policy(
 @policy_router.delete("/{policy_id}")
 def delete_policy(
     policy_id: int,
+    _current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     policy = db.query(SecurityPolicy).filter(
@@ -203,6 +257,7 @@ def get_pii_action(db: Session) -> str:
     )
 
     if policy is None:
-        return "block"
+        # DLP is useful when it can safely mask the value and preserve context.
+        return "redact"
 
     return policy.action

@@ -4,13 +4,31 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.auth import get_current_user
 from app.models import SecurityEvent
 from app.security_engine.pii_detector import redact_pii
+from app.security_engine.normalizer import normalize_text
 
 router = APIRouter(
     prefix="/events",
     tags=["Security Events"]
 )
+
+
+def _owasp_categories(reasons: list[str]) -> list[str]:
+    text = " ".join(str(reason).lower() for reason in reasons)
+    categories = []
+    if any(word in text for word in ("injection", "jailbreak", "override")):
+        categories.append("LLM01 · Prompt injection")
+    if any(word in text for word in ("pii", "sensitive", "secret", "credential", "private key", "token")):
+        categories.append("LLM02 · Sensitive information disclosure")
+    if any(word in text for word in ("tool", "shell", "ssrf", "network", "recursion", "agent")):
+        categories.append("LLM06 · Excessive agency")
+    if any(word in text for word in ("recursion", "loop", "consumption", "depth")):
+        categories.append("LLM10 · Unbounded consumption")
+    if any(word in text for word in ("output", "model response")):
+        categories.append("LLM05 · Improper output handling")
+    return list(dict.fromkeys(categories))
 
 
 def log_security_event(
@@ -21,6 +39,7 @@ def log_security_event(
     reasons: list,
     db: Session,
     ml_classification: dict | None = None,
+    metadata: dict | None = None,
 ):
     details = {
         "risk_level": risk_level,
@@ -28,12 +47,15 @@ def log_security_event(
     }
     if ml_classification is not None:
         details["ml_classification"] = ml_classification
+    details["owasp_categories"] = _owasp_categories(reasons)
+    if metadata:
+        details.update(metadata)
 
     event = SecurityEvent(
         event_type=risk_level,
         risk_score=risk_score,
         action=status,
-        prompt=redact_pii(prompt[:200])["redacted_text"],
+        prompt=redact_pii(normalize_text(prompt[:200]))["redacted_text"],
         details=details,
     )
 
@@ -51,6 +73,7 @@ def log_security_event(
         "risk_level": risk_level,
         "reasons": reasons,
         "ml_classification": ml_classification,
+        **details,
     }
 
 
@@ -80,6 +103,8 @@ def get_security_events(db: Session):
             "reasons": details.get("reasons", []),
             "ml_classification": details.get("ml_classification"),
             "action_request": details.get("action_request"),
+            "details": details,
+            "owasp_categories": details.get("owasp_categories", []),
         })
 
     return results
@@ -87,6 +112,7 @@ def get_security_events(db: Session):
 
 @router.get("/")
 def list_security_events(
+    _current_user: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     events = get_security_events(db)

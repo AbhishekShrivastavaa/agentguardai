@@ -5,9 +5,10 @@ network, secret, or tool actions.
 """
 import ipaddress
 import re
+import socket
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -18,6 +19,10 @@ from app.auth import get_current_user
 from app.events import log_security_event
 from app.models import InventoryItem, SecurityEvent
 from app.security_engine.injection_detector import detect_prompt_injection
+from app.security_engine.sandbox import DANGEROUS_COMMAND, MAX_RECURSION_DEPTH
+from app.security_engine.normalizer import normalize_text
+from app.security_engine.pii_detector import detect_pii, redact_pii
+from app.gateway_config import get_gateway_config
 
 router = APIRouter(prefix="/gateway/actions", tags=["Agent Action Gateway"])
 
@@ -29,6 +34,7 @@ class ActionRequest(BaseModel):
     action_type: ActionType
     target: str = Field(min_length=1, max_length=2000)
     justification: str = Field(default="", max_length=1000)
+    recursion_depth: int = Field(default=0, ge=0, le=1000)
 
 
 class ApprovalRequest(BaseModel):
@@ -53,7 +59,26 @@ def _private_or_metadata_host(target: str) -> bool:
         address = ipaddress.ip_address(host)
         return not address.is_global
     except ValueError:
-        return host.endswith((".internal", ".local", ".localhost"))
+        if re.fullmatch(r"[0-9.]+", host):
+            return True
+        if host.endswith((".internal", ".local", ".localhost")):
+            return True
+        # Resolve hostnames before approval so a public-looking alias cannot
+        # hide a private or link-local destination. Actual executors must pin
+        # the vetted address to prevent DNS rebinding.
+        try:
+            addresses = {row[4][0] for row in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)}
+        except OSError:
+            return True
+        if not addresses:
+            return True
+        for value in addresses:
+            try:
+                if not ipaddress.ip_address(value).is_global:
+                    return True
+            except ValueError:
+                return True
+        return False
 
 
 def _outside_workspace(target: str) -> bool:
@@ -68,13 +93,21 @@ def _outside_workspace(target: str) -> bool:
 
 
 def _decision(request: ActionRequest, db: Session) -> tuple[str, int, list[str]]:
-    target = request.target.strip()
-    prompt_detection = detect_prompt_injection(f"{target}\n{request.justification}")
+    target = normalize_text(unquote(request.target.strip()))
+    justification = normalize_text(unquote(request.justification))
+    prompt_detection = detect_prompt_injection(f"{target}\n{justification}")
     if prompt_detection.get("detected"):
         return "BLOCKED", 96, ["Prompt injection or instruction override detected in action request"]
 
+    sensitive = detect_pii(f"{target}\n{justification}", get_gateway_config(db).get("dlp_detectors"))
+    if sensitive["detected"]:
+        return "BLOCKED", 92, [f"Sensitive values in the action request must be redacted: {', '.join(sensitive['types'])}"]
+
+    if request.recursion_depth > MAX_RECURSION_DEPTH:
+        return "BLOCKED", 98, [f"Agent recursion depth exceeds the limit of {MAX_RECURSION_DEPTH}"]
+
     if request.action_type == "shell":
-        if DANGEROUS_SHELL.search(target):
+        if DANGEROUS_SHELL.search(target) or DANGEROUS_COMMAND.search(target):
             return "BLOCKED", 100, ["Destructive or remote execution command is prohibited"]
         if not SAFE_SHELL.fullmatch(target):
             return "APPROVAL_REQUIRED", 76, ["Shell commands require reviewer approval unless they match the read-only command set"]
@@ -133,16 +166,10 @@ def evaluate_action(
             decision, score = "APPROVAL_REQUIRED", max(score, 72)
             reasons = ["Agent identity is not marked protected; reviewer approval is required"] + reasons
     # Do not persist caller-provided credential assignments in audit records.
-    safe_target = "[secret identifier withheld]" if request.action_type == "secret_access" else re.sub(
-        r"(?i)(api[_-]?key|access[_-]?token|token|password|secret)\s*[:=]\s*[^\s&]+",
-        r"\1=[REDACTED]",
-        request.target,
-    )
-    safe_justification = re.sub(
-        r"(?i)(api[_-]?key|access[_-]?token|token|password|secret)\s*[:=]\s*[^\s&]+",
-        r"\1=[REDACTED]",
-        request.justification,
-    )
+    safe_target = "[secret identifier withheld]" if request.action_type == "secret_access" else redact_pii(normalize_text(unquote(request.target)))["redacted_text"]
+    safe_justification = redact_pii(normalize_text(unquote(request.justification)))["redacted_text"]
+    safe_target = re.sub(r"(?i)(api[_-]?key|access[_-]?token|token|password|secret)\s*[:=]\s*[^\s&]+", r"\1=[REDACTED]", safe_target)
+    safe_justification = re.sub(r"(?i)(api[_-]?key|access[_-]?token|token|password|secret)\s*[:=]\s*[^\s&]+", r"\1=[REDACTED]", safe_justification)
     audit_summary = f"{request.action_type} request for agent {request.agent_id}: {safe_target}"
     event = log_security_event(
         prompt=audit_summary[:200],
@@ -205,7 +232,7 @@ def _review_action(event_id: int, request: ApprovalRequest, decision: str, revie
     action_request = dict(details.get("action_request") or {})
     action_request["approval_status"] = decision.lower()
     action_request["reviewer"] = reviewer
-    action_request["review_note"] = request.note
+    action_request["review_note"] = redact_pii(normalize_text(request.note))["redacted_text"]
     details["action_request"] = action_request
     details["reasons"] = list(details.get("reasons", [])) + [f"Request {decision.lower()} by {reviewer}"]
     event.details = details

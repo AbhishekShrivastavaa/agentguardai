@@ -1,15 +1,18 @@
 from contextlib import asynccontextmanager
 import os
 from app.policies import policy_router
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.database import Base, engine
 from app import models
 from app.events import router as events_router
 from app.gateway import router as gateway_router
 from app.auth_routes import router as auth_router
-from app.ai_provider import GROQ_API_KEY, GROQ_MODEL
+from app.ai_provider import AGENTGUARD_API_KEY, GROQ_API_KEY, GROQ_MODEL
+from app.proxy import AgentGuardAPIError, router as proxy_router
+from app.gateway_config import router as gateway_config_router
 from app.inventory import router as inventory_router
 from app.action_gateway import router as action_gateway_router
 
@@ -28,6 +31,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(AgentGuardAPIError)
+async def agentguard_api_error_handler(_request: Request, exc: AgentGuardAPIError):
+    return JSONResponse(status_code=exc.status_code, content=exc.body)
 
 frontend_origins = [
     origin.strip()
@@ -49,6 +57,8 @@ app.add_middleware(
 )
 
 app.include_router(gateway_router)
+app.include_router(proxy_router)
+app.include_router(gateway_config_router)
 app.include_router(events_router)
 app.include_router(policy_router)
 app.include_router(auth_router)
@@ -72,6 +82,11 @@ def health():
             "configured": bool(GROQ_API_KEY),
             "provider": "Groq",
             "model": GROQ_MODEL,
+        },
+        "openai_compatible_gateway": {
+            "configured": bool(AGENTGUARD_API_KEY),
+            "endpoint": "/v1/chat/completions",
+            "streaming": False,
         },
     }
 

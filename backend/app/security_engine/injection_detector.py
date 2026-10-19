@@ -1,5 +1,8 @@
 import re
+import html
+from urllib.parse import unquote
 from app.security_engine.ml_classifier import classify_prompt
+from app.security_engine.normalizer import normalize_text
 
 
 PATTERNS = [
@@ -8,12 +11,20 @@ PATTERNS = [
         "Possible prompt injection"
     ),
     (
+        r"\b(disregard|forget|override|ignore)\b[\s\S]{0,80}\b(system|developer|previous|prior|above)\b[\s\S]{0,60}\b(instructions?|rules?|prompt|message)\b",
+        "Instruction hierarchy override attempt",
+    ),
+    (
         r"^\s*(?:(?:please|can\s+you|could\s+you|would\s+you)\s+){0,2}(?:show|reveal|print|repeat|quote|summarize)\s+(?:(?:me|us)\s+)?(?:(?:the|your|hidden|system|developer)\s+){0,3}(?:system\s+prompt|developer\s+instructions|hidden\s+instructions)",
         "System prompt extraction attempt"
     ),
     (
         r"^\s*(?:(?:please|can\s+you|could\s+you|would\s+you|will\s+you)\s+){0,2}(?:show|tell|give|send|print|display|reveal|list|share|expose)\s+(?:(?:me|us)\s+)?(?:(?:the|your|all|any|actual|hidden|configured|stored|private|server|provider)\s+){0,3}(?:api|access|secret|private|auth|bearer|service|provider)\s*[-_ ]?(?:keys?|tokens?|credentials?|secrets?)\b",
         "Possible credential disclosure request"
+    ),
+    (
+        r"\b(developer|system)\s+message\b[\s\S]{0,80}\b(reveal|repeat|print|expose|dump|quote)\b|\b(reveal|repeat|print|expose|dump|quote)\b[\s\S]{0,80}\b(developer|system)\s+message\b",
+        "System or developer instruction extraction attempt",
     ),
     (
         r"^\s*(?:(?:please|can\s+you|could\s+you|would\s+you)\s+){0,2}(?:what(?:\s+is|'s)|give\s+me|tell\s+me)\s+(?:(?:your|the|actual|hidden|configured|stored|private|server|provider)\s+){0,3}(?:api|access|secret|private|auth|bearer|service|provider)\s*[-_ ]?(?:keys?|tokens?|credentials?|secrets?)\b",
@@ -31,13 +42,16 @@ PATTERNS = [
 
 
 def detect_prompt_injection(prompt: str) -> dict:
+    prompt = normalize_text(prompt)
     matches = []
+    decoded = normalize_text(unquote(html.unescape(prompt)))
+    candidates = [prompt] if decoded == prompt else [prompt, decoded]
 
     for pattern, reason in PATTERNS:
-        if re.search(pattern, prompt, re.IGNORECASE):
+        if any(re.search(pattern, candidate, re.IGNORECASE) for candidate in candidates):
             matches.append(reason)
 
-    model = classify_prompt(prompt)
+    model = classify_prompt(decoded if decoded != prompt else prompt)
     if model["label"] == "attack":
         matches.append("ML model detected a likely prompt attack")
 
