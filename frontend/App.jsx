@@ -111,6 +111,15 @@ function Dashboard({ events, health, onNavigate, onRefresh, loading, agents, cur
       <MetricCard icon={Eye} label="Redacted" value={events.filter((event) => ["REDACTED", "OUTPUT_REDACTED"].includes(String(event.status).toUpperCase())).length} note="Sensitive data masked" tone="amber" />
       <MetricCard icon={CircleHelp} label="Flagged for review" value={flagged} note="Human review recommended" tone="violet" />
     </div>
+    <section className="coverage-section">
+      <div className="coverage-heading"><div><span className="coverage-kicker">THE SECURITY LAYER</span><h2>What AgentGuard checks</h2><p>Four controls you can see working in the demo.</p></div><div className="coverage-emblem" aria-hidden="true"><span /><ShieldCheck size={21} /><i /></div></div>
+      <div className="coverage-grid">
+        <article className="coverage-card injection-card"><span className="coverage-icon"><ShieldAlert size={18} /></span><span className="coverage-index">01 / INPUT</span><h3>Prompt injection</h3><p>Flags instruction overrides before a request reaches the model.</p><div className="coverage-visual injection-visual"><i /><i /><i /><b /></div></article>
+        <article className="coverage-card privacy-card"><span className="coverage-icon"><Eye size={18} /></span><span className="coverage-index">02 / PRIVACY</span><h3>Secret masking</h3><p>Redacts detected emails, tokens and other sensitive values.</p><div className="coverage-visual privacy-visual"><b>••••••••••••</b><i /></div></article>
+        <article className="coverage-card tools-card"><span className="coverage-icon"><Wrench size={18} /></span><span className="coverage-index">03 / TOOLS</span><h3>Tool request checks</h3><p>Checks the allowlist, arguments, risky URLs and recursion.</p><div className="coverage-visual tools-visual"><i /><i /><b><Check size={12} /></b></div></article>
+        <article className="coverage-card output-card"><span className="coverage-icon"><Sparkles size={18} /></span><span className="coverage-index">04 / OUTPUT</span><h3>Response scan</h3><p>Scans generated text and masks sensitive values before return.</p><div className="coverage-visual output-visual"><i /><i /><i /><b /></div></article>
+      </div>
+    </section>
           <section className="surface global-threat-surface"><div className="surface-heading"><div className="map-heading"><span className="map-heading-icon"><Network size={16} /></span><span><h2>Global threat map</h2><p>Illustrative demo geography · not live client locations</p></span></div><span className="map-sample-tag"><i /> DEMO DATA</span></div>
         <div className="world-map-toolbar"><div><strong>{worldTotal.toLocaleString()}</strong><span>illustrative demo events</span></div><div className="world-map-legend"><span><i className="legend-map-request" />Demo regions</span><span><i className="legend-map-hub" />AgentGuard gateway</span></div><span className="map-period-button">Sample view</span></div>
         <div className="world-map-layout">
