@@ -15,7 +15,7 @@ services:
       - key: AGENTGUARD_API_KEY
         generateValue: true
       - key: FRONTEND_ORIGINS
-        value: https://abhisheksrivastavaa.github.io
+        value: https://abhishekshrivastavaa.github.io
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
