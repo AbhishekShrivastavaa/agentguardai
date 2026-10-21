@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield } from "lucide-react";
+import { Activity, Code2, Shield, ShieldCheck } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function Login() {
@@ -31,7 +31,8 @@ export default function Login() {
     <div className="auth-logo"><Shield size={23} /></div>
     <p className="auth-eyebrow">AI SECURITY GATEWAY</p>
     <h1>{isRegister ? "Create your account" : "Welcome back"}</h1>
-    <p className="auth-subtitle">{isRegister ? "Set up your AgentGuard workspace." : "Sign in to your AgentGuard workspace."}</p>
+    <p className="auth-subtitle">{isRegister ? "Create a workspace to test prompts, set security policies, and review gateway decisions." : "Sign in to inspect AI requests, manage security policies, and review your audit trail."}</p>
+    <div className="auth-benefits"><div><ShieldCheck size={15} /><span>Inspect prompts and sensitive data</span></div><div><Activity size={15} /><span>Apply policies and review decisions</span></div><div><Code2 size={15} /><span>Start in the browser; integrate by API later</span></div></div>
     <form onSubmit={handleSubmit}>
       <label htmlFor="username">Username</label>
       <input id="username" value={username} onChange={(e) => setUsername(e.target.value)} minLength={3} maxLength={50} required autoComplete="username" placeholder="Enter your username" />
@@ -42,6 +43,6 @@ export default function Login() {
       <button className="auth-submit" disabled={loading}>{loading ? "Please wait…" : isRegister ? "Create account" : "Sign in"}</button>
     </form>
     <div className="auth-switch">{isRegister ? "Already have an account?" : "New to AgentGuard?"}<button type="button" onClick={() => { setIsRegister(!isRegister); setError(""); }}>{isRegister ? "Sign in" : "Create account"}</button></div>
-    <p className="auth-footer">AgentGuard AI · Protecting AI interactions</p>
+    <p className="auth-footer">AgentGuard AI · Inspect prompts and tool requests before they reach your AI provider.</p>
   </section></main>;
 }
