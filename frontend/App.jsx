@@ -11,12 +11,15 @@ import { useAuth } from "./src/context/AuthContext.jsx";
 import { createInventoryItem, createPolicy, deleteInventoryItem, deletePolicy, evaluateAgentAction, getBackendHealth, getGatewayPolicyConfig, getInventory, getPolicies, getSecurityEvents, reviewAgentAction, saveGatewayPolicyConfig, scanPrompt, updateInventoryItem, updatePolicy } from "./src/services/api.js";
 
 const NAV = [
-  { label: "START HERE", items: [["Getting Started", BookOpen]] },
-  { label: "OPERATIONS", items: [["Dashboard", LayoutDashboard], ["Playground", Sparkles], ["Workflows", Workflow], ["Analytics", Activity]] },
-  { label: "AGENT SECURITY", items: [["Agents", Bot], ["Action Gateway", ShieldAlert], ["Policies", ShieldCheck]] },
-  { label: "INVENTORY", items: [["MCP Servers", Network], ["Tools", Wrench]] },
-  { label: "RESPONSE", items: [["Security Events", Activity], ["Investigations", Search]] },
-  { label: "ADMINISTRATION", items: [["API Keys", KeyRound], ["Settings", SettingsIcon]] },
+  { label: "START", items: [["Getting Started", BookOpen, "How to use"], ["Dashboard", LayoutDashboard, "Overview"]] },
+  { label: "PROTECT", items: [["Playground", Sparkles, "Try a prompt"], ["Agents", Bot, "AI agents"], ["Policies", ShieldCheck, "Security rules"]] },
+  { label: "REVIEW", items: [["Security Events", Activity, "Activity"]] },
+];
+const MORE_NAV = [
+  ["Action Gateway", ShieldAlert, "Action checks"], ["Workflows", Workflow, "Guided workflow"],
+  ["Investigations", Search, "Investigations"], ["Analytics", Activity, "Analytics"],
+  ["MCP Servers", Network, "MCP servers"], ["Tools", Wrench, "Tool inventory"],
+  ["API Keys", KeyRound, "API setup"], ["Settings", SettingsIcon, "Settings"],
 ];
 
 const SAMPLE_AGENT_NAMES = new Set([
@@ -540,6 +543,7 @@ export default function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const hostedDemo = window.location.protocol === "https:" && !["localhost", "127.0.0.1"].includes(window.location.hostname);
   const [page, setPage] = useState("Getting Started"); const [events, setEvents] = useState([]); const [health, setHealth] = useState("checking"); const [aiProvider, setAiProvider] = useState({ configured: false, provider: "Groq", model: "", gatewayConfigured: false }); const [loading, setLoading] = useState(false); const [scanLoading, setScanLoading] = useState(false); const [scanResult, setScanResult] = useState(null); const [scanError, setScanError] = useState(""); const [chatMessages, setChatMessages] = useState([]); const [selectedEvent, setSelectedEvent] = useState(null); const [mobileNav, setMobileNav] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [agents, setAgents] = useState([]);
   const refresh = useCallback(async () => { setLoading(true); try { const [eventData, healthData] = await Promise.all([getSecurityEvents(), getBackendHealth()]); setEvents(eventData.events || []); setHealth(healthData.status === "healthy" ? "healthy" : "unavailable"); setAiProvider({ ...(healthData.ai_provider || { configured: false, provider: "Groq", model: "" }), gatewayConfigured: Boolean(healthData.openai_compatible_gateway?.configured) }); } catch { setHealth("unavailable"); } finally { setLoading(false); } }, []);
   useEffect(() => {
@@ -557,7 +561,8 @@ export default function App() {
   async function runScan(prompt, useAI, conversation, options = {}) { setScanLoading(true); setScanError(""); try { const data = await scanPrompt(prompt, useAI, conversation, options); setScanResult(data); await refresh(); return data; } catch (e) { setScanError(e.message || "The scan could not be completed."); return null; } finally { setScanLoading(false); } }
   if (authLoading) return <div className="auth-loading"><span className="brand-mark"><Shield size={21} /></span>AgentGuard AI</div>;
   if (!user) return <Login />;
-  function navigate(next) { setPage(next); setMobileNav(false); }
+  function navigate(next) { setPage(next); setMobileNav(false); if (MORE_NAV.some(([key]) => key === next)) setMoreOpen(true); }
+  const pageLabel = [...NAV.flatMap((group) => group.items), ...MORE_NAV].find(([key]) => key === page)?.[2] || page;
   function content() {
     if (page === "Getting Started") return <GettingStarted health={health} aiProvider={aiProvider} gatewayConfigured={aiProvider.gatewayConfigured} onNavigate={navigate} />;
     if (page === "Profile") return <Profile user={user} onSignOut={logout} />;
@@ -578,11 +583,13 @@ export default function App() {
   return <div className="app-shell">
     <aside className={`sidebar ${mobileNav ? "mobile-open" : ""}`}><div className="brand"><span className="brand-mark"><Shield size={21} /></span><span><strong>AgentGuard<span> AI</span></strong><small>AI SECURITY GATEWAY</small></span><button className="mobile-close" aria-label="Close navigation" onClick={() => setMobileNav(false)}><X size={18} /></button></div>
       <div className="workspace-label">WORKSPACE</div><button className={`workspace-card workspace-card-button ${page === "My Workspace" ? "active" : ""}`} onClick={() => navigate("My Workspace")} aria-label="Open My Workspace"><span className="workspace-avatar">{user.username?.charAt(0).toUpperCase() || "A"}</span><span><strong>My Workspace</strong><small>Personal workspace</small></span><ChevronDown size={15} /></button>
-      <nav>{NAV.map((group) => <div className="nav-group" key={group.label}><p className="nav-heading">{group.label}</p>{group.items.map(([label, Icon]) => <button key={label} className={`nav-item ${page === label ? "active" : ""}`} onClick={() => navigate(label)}><Icon size={17} strokeWidth={1.8} /><span>{label}</span>{label === "Security Events" && events.length > 0 && <small className="nav-count">{events.length}</small>}</button>)}</div>)}</nav>
+      <nav>{NAV.map((group) => <div className="nav-group" key={group.label}><p className="nav-heading">{group.label}</p>{group.items.map(([label, Icon, hint]) => <button key={label} className={`nav-item ${page === label ? "active" : ""}`} onClick={() => navigate(label)}><Icon size={17} strokeWidth={1.8} /><span className="nav-item-copy"><span>{label}</span>{hint && <small>{hint}</small>}</span>{label === "Security Events" && events.length > 0 && <small className="nav-count">{events.length}</small>}</button>)}</div>)}
+        <div className="nav-group more-nav-group"><button className="nav-item more-nav-toggle" aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)}><span className="more-dots">•••</span><span className="nav-item-copy"><span>More tools</span><small>Advanced setup</small></span><ChevronDown size={15} className={moreOpen ? "more-chevron open" : "more-chevron"} /></button>{moreOpen && <div className="more-nav-items">{MORE_NAV.map(([label, Icon, hint]) => <button key={label} className={`nav-item ${page === label ? "active" : ""}`} onClick={() => navigate(label)}><Icon size={16} strokeWidth={1.8} /><span className="nav-item-copy"><span>{label}</span><small>{hint}</small></span></button>)}</div>}</div>
+      </nav>
       <div className="sidebar-bottom"><div className="help-card"><span><CircleHelp size={17} /></span><strong>Need a hand?</strong><p>Explore the API docs and project setup guide.</p><a href={`${import.meta.env.VITE_API_URL || "http://127.0.0.1:8001"}/docs`} target="_blank" rel="noreferrer">Open API docs <ExternalLink size={12} /></a></div><div className={`profile-row ${page === "Profile" ? "active" : ""}`}><button className="profile-open" onClick={() => navigate("Profile")} aria-label="Open profile"><span className="profile-avatar">{user.username?.charAt(0).toUpperCase() || "A"}</span><span><strong>{user.username}</strong><small>View profile</small></span></button><button className="icon-action" onClick={logout} title="Sign out" aria-label="Sign out"><LogOut size={16} /></button></div></div>
     </aside>
     {mobileNav && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
-    <main className="main-area"><header className="topbar"><div className="breadcrumbs"><button className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu size={19} /></button><span>Workspace</span><b>/</b><strong>{page}</strong></div><div className="topbar-right"><span className="environment"><i /> {hostedDemo ? "ONLINE" : "LOCAL"}</span><button className="icon-action top-refresh" title="Refresh backend data" onClick={refresh}><RefreshCw size={16} className={loading ? "spin" : ""} /></button><button className="top-avatar top-avatar-button" onClick={() => navigate("Profile")} title="Open profile" aria-label="Open profile">{user.username?.slice(0, 2).toUpperCase() || "AG"}</button></div></header>
+    <main className="main-area"><header className="topbar"><div className="breadcrumbs"><button className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Open navigation"><Menu size={19} /></button><span>Workspace</span><b>/</b><strong>{pageLabel}</strong></div><div className="topbar-right"><span className="environment"><i /> {hostedDemo ? "ONLINE" : "LOCAL"}</span><button className="icon-action top-refresh" title="Refresh backend data" onClick={refresh}><RefreshCw size={16} className={loading ? "spin" : ""} /></button><button className="top-avatar top-avatar-button" onClick={() => navigate("Profile")} title="Open profile" aria-label="Open profile">{user.username?.slice(0, 2).toUpperCase() || "AG"}</button></div></header>
       <div className="page-content">{health === "unavailable" && <div className="connection-alert"><AlertTriangle size={16} /><span>Backend unavailable. Check that the FastAPI service is running.</span><button onClick={refresh}>Retry</button></div>}{content()}<footer className="footer"><span>AgentGuard AI <i /> {hostedDemo ? "Hosted service" : "Local environment"}</span><span>Security decisions from your gateway</span></footer></div>
     </main><EventDetails event={selectedEvent} onClose={() => setSelectedEvent(null)} />
   </div>;
