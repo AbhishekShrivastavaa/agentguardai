@@ -8,50 +8,23 @@ import {
 } from "lucide-react";
 import Login from "./src/pages/Login.jsx";
 import { useAuth } from "./src/context/AuthContext.jsx";
-import { createInventoryItem, createPolicy, deletePolicy, evaluateAgentAction, getBackendHealth, getGatewayPolicyConfig, getInventory, getPolicies, getSecurityEvents, reviewAgentAction, saveGatewayPolicyConfig, scanPrompt, updateInventoryItem, updatePolicy } from "./src/services/api.js";
+import { createInventoryItem, createPolicy, deleteInventoryItem, deletePolicy, evaluateAgentAction, getBackendHealth, getGatewayPolicyConfig, getInventory, getPolicies, getSecurityEvents, reviewAgentAction, saveGatewayPolicyConfig, scanPrompt, updateInventoryItem, updatePolicy } from "./src/services/api.js";
 
 const NAV = [
   { label: "START HERE", items: [["Getting Started", BookOpen]] },
-  { label: "MONITORING", items: [["Dashboard", LayoutDashboard], ["Playground", Sparkles], ["Security Events", Activity]] },
-  { label: "CONTROLS", items: [["Policies", ShieldCheck], ["Agents", Bot]] },
+  { label: "OPERATIONS", items: [["Dashboard", LayoutDashboard], ["Playground", Sparkles], ["Workflows", Workflow], ["Analytics", Activity]] },
+  { label: "AGENT SECURITY", items: [["Agents", Bot], ["Action Gateway", ShieldAlert], ["Policies", ShieldCheck]] },
+  { label: "INVENTORY", items: [["MCP Servers", Network], ["Tools", Wrench]] },
+  { label: "RESPONSE", items: [["Security Events", Activity], ["Investigations", Search]] },
+  { label: "ADMINISTRATION", items: [["API Keys", KeyRound], ["Settings", SettingsIcon]] },
 ];
 
-const DEMO_AGENTS = [
-  { id: "AG-014", name: "Claims Processing Agent", owner: "Claims Operations", risk: "High", model: "gpt-oss-120b", tokens: "1.3M / 900K", policy: "Identity + PII controls", status: "Needs review" },
-  { id: "AG-021", name: "Code Reviewer", owner: "Engineering", risk: "Low", model: "gpt-oss-120b", tokens: "482K / 291K", policy: "Code safety baseline", status: "Protected" },
-  { id: "AG-033", name: "Fraud Detection Agent", owner: "Risk Operations", risk: "Medium", model: "gpt-oss-120b", tokens: "724K / 188K", policy: "Data minimization", status: "Protected" },
-  { id: "AG-008", name: "Customer Support", owner: "Customer Experience", risk: "Low", model: "gpt-oss-120b", tokens: "918K / 1.1M", policy: "PII redaction", status: "Protected" },
-  { id: "AG-027", name: "Document Analyzer", owner: "Legal Operations", risk: "Medium", model: "gpt-oss-120b", tokens: "238K / 172K", policy: "Document prompt guard", status: "Review" },
-  { id: "AG-041", name: "Data Viz Assistant", owner: "Analytics", risk: "Low", model: "gpt-oss-120b", tokens: "156K / 203K", policy: "Read-only tools", status: "Protected" },
-];
-
-const MCP_SERVERS = [
-  { name: "Slack", category: "Communication", state: "Sanctioned", tools: 8, icon: "S" },
-  { name: "Google Drive", category: "Knowledge", state: "Sanctioned", tools: 12, icon: "G" },
-  { name: "Jira", category: "Project management", state: "Review", tools: 10, icon: "J" },
-  { name: "Confluence", category: "Knowledge", state: "Sanctioned", tools: 7, icon: "C" },
-  { name: "GitHub", category: "Developer tools", state: "Sanctioned", tools: 14, icon: "GH" },
-  { name: "Chrome", category: "Browser", state: "Review", tools: 6, icon: "Ch" },
-  { name: "Hugging Face", category: "AI models", state: "Review", tools: 5, icon: "HF" },
-  { name: "Redis", category: "Data", state: "Sanctioned", tools: 4, icon: "R" },
-  { name: "Gemini", category: "AI models", state: "Review", tools: 5, icon: "Ge" },
-];
-
-const DEMO_TOOLS = [
-  ["search_documents", "Google Drive", "Read", "Low"], ["post_message", "Slack", "Write", "Medium"],
-  ["create_issue", "Jira", "Write", "Medium"], ["read_repository", "GitHub", "Read", "Low"],
-  ["execute_query", "Redis", "Data access", "High"], ["browse_page", "Chrome", "Browser", "Medium"],
-  ["create_page", "Confluence", "Write", "Medium"], ["download_model", "Hugging Face", "External", "High"],
-  ["summarize_thread", "Slack", "Read", "Low"], ["search_issues", "Jira", "Read", "Low"],
-  ["list_files", "Google Drive", "Read", "Low"], ["update_record", "Redis", "Write", "High"],
-];
-
-function readDemoAgents() {
-  try {
-    const saved = JSON.parse(localStorage.getItem("agentguard_demo_agents") || "null");
-    return Array.isArray(saved) ? saved : DEMO_AGENTS;
-  } catch { return DEMO_AGENTS; }
-}
+const SAMPLE_AGENT_NAMES = new Set([
+  "Claims Processing Agent", "Code Reviewer", "Fraud Detection Agent",
+  "Customer Support", "Document Analyzer", "Data Viz Assistant",
+]);
+const SAMPLE_TOOL_NAMES = new Set(["search_documents", "post_message", "create_issue", "read_repository", "execute_query", "browse_page", "create_page", "download_model", "summarize_thread", "search_issues", "list_files", "update_record"]);
+const SAMPLE_SERVER_NAMES = new Set(["Slack", "Google Drive", "Jira", "Confluence", "GitHub", "Chrome", "Hugging Face", "Redis", "Gemini"]);
 
 function statusClass(value = "") {
   const v = String(value).toLowerCase();
@@ -84,12 +57,9 @@ function EventTable({ events, onSelect, compact = false }) {
   </tr>)}</tbody></table></div>;
 }
 
-function Dashboard({ events, health, onNavigate, onRefresh, loading, agents, currentUser }) {
-  const [selectedGeo, setSelectedGeo] = useState("All regions");
-  const worldRegions = [["Australia", 8006, "AU", "cyan"], ["Denmark", 6534, "DK", "violet"], ["Brazil", 3231, "BR", "blue"], ["India", 2115, "IN", "mint"]];
-  const worldTotal = worldRegions.reduce((sum, region) => sum + region[1], 0);
-  const blocked = events.filter((e) => ["BLOCKED", "OUTPUT_BLOCKED"].includes(String(e.status).toUpperCase())).length;
-  const flagged = events.filter((e) => String(e.status).toUpperCase() === "FLAGGED").length;
+function Dashboard({ events, health, onNavigate }) {
+  const blocked = events.filter((e) => ["BLOCKED", "OUTPUT_BLOCKED", "REJECTED"].includes(String(e.status).toUpperCase())).length;
+  const flagged = events.filter((e) => ["FLAGGED", "APPROVAL_REQUIRED"].includes(String(e.status).toUpperCase())).length;
   return <>
     <PageHeading eyebrow="SECURITY OVERVIEW" title="AI security gateway" description="Put a security checkpoint between your AI app and its model. Inspect prompts and tool requests, apply policy, then review every decision." action={<div className="heading-actions"><button className="button secondary" onClick={() => onNavigate("Getting Started")}><BookOpen size={15} /> How to use</button><button className="button primary" onClick={() => onNavigate("Playground")}><Sparkles size={15} /> Scan a prompt</button></div>} />
     <section className="dashboard-hero surface">
@@ -121,26 +91,7 @@ function Dashboard({ events, health, onNavigate, onRefresh, loading, agents, cur
         <article className="coverage-card output-card"><span className="coverage-icon"><Sparkles size={18} /></span><span className="coverage-index">04 / OUTPUT</span><h3>Response scan</h3><p>Scans generated text and masks sensitive values before return.</p><div className="coverage-visual output-visual"><i /><i /><i /><b /></div></article>
       </div>
     </section>
-          <section className="surface global-threat-surface"><div className="surface-heading"><div className="map-heading"><span className="map-heading-icon"><Network size={16} /></span><span><h2>Global threat map</h2><p>Illustrative demo geography · not live client locations</p></span></div><span className="map-sample-tag"><i /> DEMO DATA</span></div>
-        <div className="world-map-toolbar"><div><strong>{worldTotal.toLocaleString()}</strong><span>illustrative demo events</span></div><div className="world-map-legend"><span><i className="legend-map-request" />Demo regions</span><span><i className="legend-map-hub" />AgentGuard gateway</span></div><span className="map-period-button">Sample view</span></div>
-        <div className="world-map-layout">
-          <div className="world-map-visual">
-            <svg className="world-map-svg" viewBox="0 0 600 300" role="img" aria-label="Illustrative world map with demo activity markers">
-              <defs><pattern id="map-grid" width="40" height="30" patternUnits="userSpaceOnUse"><path d="M40 0H0V30" fill="none" stroke="#23404a" strokeWidth="1" opacity=".45" /></pattern><radialGradient id="map-glow"><stop stopColor="#9185e8" stopOpacity=".22" /><stop offset="1" stopColor="#9185e8" stopOpacity="0" /></radialGradient><linearGradient id="land-fill" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#34364b" /><stop offset="1" stopColor="#222637" /></linearGradient></defs>
-              <rect width="600" height="300" fill="url(#map-grid)" />
-              <ellipse cx="300" cy="150" rx="282" ry="135" fill="url(#map-glow)" />
-              <g className="world-graticule"><ellipse cx="300" cy="150" rx="130" ry="140" /><ellipse cx="300" cy="150" rx="250" ry="140" /><path d="M18 150h564M34 102h532M34 198h532" /></g>
-              <g className="world-land"><path d="m48 65 19-15 34 4 13 11 26-3 18 12 27 3 13 16-13 12-4 19-18 5-10 22-20 5-9 24-18-4-8-19-19-4-8-20-18-4-4-20-13-6-5-22Z" /><path d="m175 170 21 3 11 17-3 23 12 17-9 23-9 27-14-12-7-29-14-19 3-25-9-14Z" /><path d="m268 75 19-12 23 3 12 11 22-4 18 9 22-1 23 10 35-2 22 12 28 2 18 17-9 14-30 2-12 13-24-2-13 14-21-4-12 14-22 1-14-14-19 7-18-13-22 5-14-17-21-3-9-17-17-3-8-22Z" /><path d="m293 146 23 3 14 15-5 23-12 16-7 25-14 19-10-20-3-25-11-20 5-22Z" /><path d="m494 207 24-5 19 12 8 19-20 14-24-7-11-17Z" /><path d="m110 45 20-13 27 6 10 14-16 11-25-4Z" /><path d="m267 69 7-8 5 2-2 8Zm31 11 3-5 4 4-2 5Zm87 23 5-8 5 2-3 9Zm-64 72 8 20-3 9-8-21Zm158 18 10 3-2 5-11-3Z" /></g>
-              <g className="map-routes"><path d="M300 150 Q420 120 505 230" /><path d="M300 150 Q235 145 194 216" /><path d="M300 150 Q350 100 322 93" /><path d="M300 150 Q345 125 386 133" /></g>
-              <g className="world-hub"><circle cx="300" cy="150" r="17" /><circle cx="300" cy="150" r="8" /><path d="M296 150h8m-4-4v8" /></g>
-              <g className={"world-marker marker-one " + (selectedGeo === "Australia" ? "selected" : "")}><circle cx="505" cy="230" r="15" /><circle cx="505" cy="230" r="4" /></g><g className={"world-marker marker-two " + (selectedGeo === "Denmark" ? "selected" : "")}><circle cx="322" cy="93" r="12" /><circle cx="322" cy="93" r="3.5" /></g><g className={"world-marker marker-three " + (selectedGeo === "Brazil" ? "selected" : "")}><circle cx="194" cy="216" r="14" /><circle cx="194" cy="216" r="4" /></g><g className={"world-marker marker-four " + (selectedGeo === "India" ? "selected" : "")}><circle cx="386" cy="133" r="11" /><circle cx="386" cy="133" r="3" /></g>
-            </svg>
-            <span className="map-coordinate coordinate-a">40°N</span><span className="map-coordinate coordinate-b">20°S</span><span className="map-overlay-label">DEMO ORIGIN SIGNALS</span>
-          </div>
-          <div className="world-region-list">{worldRegions.map(([name, count, code, tone]) => <button className={"world-region-row " + (selectedGeo === name ? "active" : "")} key={code} onClick={() => setSelectedGeo(selectedGeo === name ? "All regions" : name)}><span className={"region-dot " + tone} /><span className="region-code">{code}</span><span>{name}</span><strong>{count.toLocaleString()}</strong><i className="region-volume"><b style={{ width: (count / 8006 * 100) + "%" }} /></i></button>)}</div>
-        </div>
-        <div className="map-data-note"><Shield size={12} /><span><strong>Demo geography</strong> · source IP geolocation is not yet collected by the live gateway.</span><button onClick={() => onNavigate("Security Events")}>Open audit log <ArrowUpRight size={12} /></button></div>
-      </section>
+    <ActivityBreakdown events={events} onNavigate={onNavigate} />
     <section className="surface verdict-explainer">
       <div className="surface-heading"><div><h2>Four clear outcomes</h2><p>What the gateway does after inspection</p></div></div>
       <div className="verdict-grid">
@@ -152,6 +103,17 @@ function Dashboard({ events, health, onNavigate, onRefresh, loading, agents, cur
     </section>
     <section className="surface recent-surface"><div className="surface-heading"><div><h2>Recent security decisions</h2><p>Each decision includes the reason and risk score.</p></div><button className="text-button" onClick={() => onNavigate("Security Events")}>Open audit log <ArrowUpRight size={14} /></button></div><EventTable events={events.slice(0, 5)} compact /></section>
   </>;
+}
+
+function ActivityBreakdown({ events, onNavigate }) {
+  const outcomes = [
+    { label: "Allowed", statuses: ["ALLOWED", "ACTION_ALLOWED", "APPROVED"], tone: "success" },
+    { label: "Redacted", statuses: ["REDACTED", "OUTPUT_REDACTED"], tone: "warning" },
+    { label: "Blocked", statuses: ["BLOCKED", "OUTPUT_BLOCKED", "REJECTED"], tone: "danger" },
+    { label: "Review required", statuses: ["FLAGGED", "APPROVAL_REQUIRED"], tone: "violet" },
+  ].map((item) => ({ ...item, count: events.filter((event) => item.statuses.includes(String(event.status).toUpperCase())).length }));
+  const maxCount = Math.max(1, ...outcomes.map((item) => item.count));
+  return <section className="surface activity-breakdown"><div className="surface-heading"><div><h2>Security decisions</h2><p>Counts from this workspace’s recorded gateway events</p></div><button className="text-button" onClick={() => onNavigate("Analytics")}>Open analytics <ArrowUpRight size={13} /></button></div>{events.length ? <div className="outcome-bars">{outcomes.map((item) => <div className="outcome-row" key={item.label}><div><span>{item.label}</span><strong>{item.count}</strong></div><div className="outcome-track"><i className={item.tone} style={{ width: `${item.count ? Math.max(3, item.count / maxCount * 100) : 0}%` }} /></div></div>)}</div> : <EmptyState icon={Activity} title="No gateway activity yet" description="Run a prompt scan or evaluate an agent action to create the first real security event." action={<div className="guide-actions"><button className="button primary small" onClick={() => onNavigate("Playground")}><Sparkles size={14} /> Scan a prompt</button><button className="button secondary small" onClick={() => onNavigate("Action Gateway")}><ShieldCheck size={14} /> Evaluate an action</button></div>} />}</section>;
 }
 
 function GettingStarted({ health, aiProvider, gatewayConfigured, onNavigate }) {
@@ -186,21 +148,27 @@ function AgentDirectory({ agents, setAgents, onNavigate }) {
   const visible = agents.filter((agent) => `${agent.name} ${agent.owner} ${agent.id}`.toLowerCase().includes(search.toLowerCase()) && (risk === "All risks" || agent.risk === risk));
   async function register(event) {
     event.preventDefault();
-    const agent = { id: `AG-${String(Date.now()).slice(-4)}`, name: draft.name.trim(), owner: draft.owner.trim() || "New workspace", risk: "Low", model: draft.model, tokens: "0 / 0", policy: "Default gateway policy", status: "Protected" };
+    const agent = { id: `AG-${String(Date.now()).slice(-4)}`, name: draft.name.trim(), owner: draft.owner.trim() || "Unassigned", risk: "Medium", model: draft.model, policy: "Default gateway policy", status: "Review" };
     try { const saved = await createInventoryItem("agents", agent); setAgents([saved, ...agents]); setShowRegister(false); setDraft({ name: "", owner: "", model: "openai/gpt-oss-120b" }); setNotice(`${agent.name} added to the workspace registry.`); } catch (error) { setNotice(error.message || "Could not register this agent."); }
   }
-  async function protect(agent) {
-    const updated = { ...agent, risk: "Medium", status: "Protected", policy: "Least privilege + PII controls" };
-    try { const saved = await updateInventoryItem("agents", updated); setAgents(agents.map((item) => item.registry_id === agent.registry_id ? saved : item)); setNotice(`Least-privilege posture saved for ${agent.name}.`); } catch (error) { setNotice(error.message || "Could not update this agent."); }
+  async function setPosture(agent) {
+    const status = agent.status === "Protected" ? "Review" : "Protected";
+    const updated = { ...agent, status, policy: agent.policy || "Default gateway policy" };
+    try { const saved = await updateInventoryItem("agents", updated); setAgents(agents.map((item) => item.registry_id === agent.registry_id ? saved : item)); setNotice(`${agent.name} action-gate posture set to ${status.toLowerCase()}.`); } catch (error) { setNotice(error.message || "Could not update this agent."); }
+  }
+  async function remove(agent) {
+    if (!agent.registry_id || !window.confirm(`Remove ${agent.name} from this workspace inventory?`)) return;
+    try { await deleteInventoryItem("agents", agent.registry_id); setAgents((current) => current.filter((item) => item.registry_id !== agent.registry_id)); setNotice(`${agent.name} removed from the inventory.`); }
+    catch (error) { setNotice(error.message || "Could not remove this agent."); }
   }
   return <>
-    <PageHeading eyebrow="AI INVENTORY" title="Agents & identities" description="Maintain an agent registry and review ownership, model, risk, and policy metadata. Registry entries do not connect or intercept live agents." action={<div className="heading-actions"><button className="button secondary" onClick={() => onNavigate("Workflows")}><Workflow size={15} /> Try protected workflow</button><button className="button primary" onClick={() => setShowRegister(true)}><Plus size={15} /> Register agent</button></div>} />
+    <PageHeading eyebrow="AGENT SECURITY" title="Agents & identities" description="Register agents, track ownership and model metadata, and set their posture for pre-execution action checks. This registry does not connect to an agent runtime." action={<div className="heading-actions"><button className="button secondary" onClick={() => onNavigate("Action Gateway")}><ShieldCheck size={15} /> Evaluate an action</button><button className="button primary" onClick={() => setShowRegister(true)}><Plus size={15} /> Register agent</button></div>} />
     {notice && <div className="info-banner inventory-notice"><CheckCircle2 size={15} />{notice}<button className="icon-action" onClick={() => setNotice("")}><X size={14} /></button></div>}
     <div className="metric-grid three"><MetricCard icon={Bot} label="Registered agents" value={agents.length} note="Workspace inventory" /><MetricCard icon={AlertTriangle} label="Elevated risk" value={agents.filter((agent) => agent.risk === "High").length} note="Review suggested" tone="rose" /><MetricCard icon={ShieldCheck} label="Protected" value={agents.filter((agent) => agent.status === "Protected").length} note="Policy attached" tone="green" /></div>
-    <section className="surface inventory-surface"><div className="surface-heading"><div><h2>All agents ({visible.length})</h2><p>Identity, model group, usage and runtime policy state</p></div><span className="demo-indicator"><i /> DEMO REGISTRY</span></div>
+    <section className="surface inventory-surface"><div className="surface-heading"><div><h2>Agent registry ({visible.length})</h2><p>Identity, owner, model and action-gate posture</p></div><span className="demo-indicator"><i /> WORKSPACE INVENTORY</span></div>
       <div className="filter-bar"><div className="search-field"><Search size={15} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by agent name, owner or ID" /></div><div className="select-field"><Filter size={14} /><select value={risk} onChange={(e) => setRisk(e.target.value)}><option>All risks</option><option>High</option><option>Medium</option><option>Low</option></select></div></div>
-      <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>RISK</th><th>NAME & IDENTITY</th><th>RISK POSTURE</th><th>MODEL GROUP</th><th>TOKENS (REQ / RES)</th><th>RUNTIME POLICIES</th><th>ACTION</th></tr></thead><tbody>{visible.map((agent) => <tr key={agent.id}><td><span className={`risk-orb ${agent.risk.toLowerCase()}`} /></td><td><strong className="inventory-name">{agent.name}</strong><small className="inventory-sub">{agent.id} · {agent.owner}</small></td><td><Badge>{agent.risk}</Badge></td><td><span className="model-cell">{agent.model}</span></td><td>{agent.tokens}</td><td><span className="policy-cell"><ShieldCheck size={13} />{agent.policy}</span></td><td>{agent.risk === "High" ? <button className="button mini primary" onClick={() => protect(agent)}>Apply controls</button> : <Badge>{agent.status}</Badge>}</td></tr>)}</tbody></table></div>
-      <p className="inventory-disclaimer">Seeded names and usage totals are illustrative. New agent records are saved to your workspace registry; adding a record does not provision or connect an agent.</p>
+      {visible.length ? <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>NAME & OWNER</th><th>RISK</th><th>MODEL</th><th>POLICY LABEL</th><th>ACTION-GATE POSTURE</th><th>ACTIONS</th></tr></thead><tbody>{visible.map((agent) => { const isSample = SAMPLE_AGENT_NAMES.has(agent.name); return <tr key={agent.registry_id || agent.id}><td><strong className="inventory-name">{agent.name}{isSample && <span className="sample-row-tag">Sample</span>}</strong><small className="inventory-sub">{agent.id || `Record ${agent.registry_id}`} · {agent.owner || "Unassigned"}</small></td><td><Badge>{agent.risk || "Unrated"}</Badge></td><td><span className="model-cell">{agent.model || "Not specified"}</span></td><td><span className="policy-cell"><ShieldCheck size={13} />{agent.policy || "Default gateway policy"}</span></td><td><Badge>{agent.status || "Review"}</Badge></td><td><div className="agent-row-actions"><button className="button mini secondary" onClick={() => setPosture(agent)}>{agent.status === "Protected" ? "Set to review" : "Mark protected"}</button><button className="button mini secondary" onClick={() => remove(agent)}>Remove</button></div></td></tr>; })}</tbody></table></div> : <EmptyState icon={Bot} title={agents.length ? "No agents match these filters" : "Register your first agent"} description={agents.length ? "Try a different name or risk filter." : "Add a real agent record to evaluate its proposed actions in the pre-execution gateway."} action={!agents.length && <button className="button primary small" onClick={() => setShowRegister(true)}><Plus size={14} /> Register agent</button>} />}
+      <p className="inventory-disclaimer">Sample entries from older workspaces are labeled and removable. Marking an agent protected changes its action-gate posture; it does not deploy an agent or install a runtime connector.</p>
     </section>
     {showRegister && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowRegister(false); }}><form className="event-modal register-modal" onSubmit={register}><div className="modal-heading"><div><span className="eyebrow">WORKSPACE REGISTRY</span><h2>Register an agent</h2></div><button type="button" className="icon-action" onClick={() => setShowRegister(false)} aria-label="Close"><X size={18} /></button></div><label>Agent name<input required maxLength={80} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Contract Review Agent" /></label><label>Owner or team<input maxLength={80} value={draft.owner} onChange={(e) => setDraft({ ...draft, owner: e.target.value })} placeholder="e.g. Legal Operations" /></label><label>Model group<select value={draft.model} onChange={(e) => setDraft({ ...draft, model: e.target.value })}><option>openai/gpt-oss-120b</option><option>Groq · model group</option><option>External · needs review</option></select></label><div className="modal-actions"><button className="button secondary" type="button" onClick={() => setShowRegister(false)}>Cancel</button><button className="button primary" type="submit"><Plus size={14} /> Add agent</button></div><p className="inventory-disclaimer">This saves an inventory record. To inspect live requests, route the agent’s model calls through the gateway endpoint.</p></form></div>}
   </>;
@@ -211,40 +179,57 @@ function IntegrationCatalog({ kind }) {
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState("All states");
   const [items, setItems] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [draft, setDraft] = useState({ name: "", category: "AI models", server: "", scope: "Read", risk: "Low" });
   const [loadError, setLoadError] = useState("");
+  const [message, setMessage] = useState("");
   useEffect(() => {
     let active = true;
     const category = isServers ? "mcp-servers" : "tools";
     (async () => {
       try {
-        let rows = await getInventory(category);
-        const defaults = isServers
-          ? MCP_SERVERS.map((row) => ({ ...row }))
-          : DEMO_TOOLS.map(([name, server, scope, risk], i) => ({ id: `TL-${String(i + 1).padStart(3, "0")}`, name, server, scope, risk, state: risk === "High" ? "Review" : "Sanctioned" }));
-        const existingNames = new Set(rows.map((row) => row.name));
-        for (const row of defaults) if (!existingNames.has(row.name)) await createInventoryItem(category, row);
-        rows = await getInventory(category);
+        const rows = await getInventory(category);
         if (active) setItems(rows);
       } catch (error) { if (active) setLoadError(error.message || "Could not load inventory."); }
     })();
     return () => { active = false; };
   }, [isServers]);
-  const [message, setMessage] = useState("");
   const rows = items.filter((item) => `${item.name} ${item.category || item.server} ${item.category ? "" : item.scope}`.toLowerCase().includes(query.toLowerCase()) && (stateFilter === "All states" || item.state === stateFilter));
+  async function addItem(event) {
+    event.preventDefault();
+    const name = draft.name.trim();
+    const item = isServers
+      ? { name, category: draft.category, state: "Review", tools: 0, icon: name.slice(0, 2).toUpperCase() }
+      : { name, server: draft.server.trim(), scope: draft.scope, risk: draft.risk, state: "Review" };
+    try {
+      const saved = await createInventoryItem(isServers ? "mcp-servers" : "tools", item);
+      setItems((current) => [saved, ...current.filter((row) => row.registry_id !== saved.registry_id)]);
+      setShowAdd(false);
+      setDraft({ name: "", category: "AI models", server: "", scope: "Read", risk: "Low" });
+      setMessage(`${name} added in Review state.`);
+      setLoadError("");
+    } catch (error) { setLoadError(error.message || "Could not add this inventory item."); }
+  }
   async function toggle(item) {
     const nextState = item.state === "Sanctioned" ? "Review" : "Sanctioned";
     try { const updated = await updateInventoryItem(isServers ? "mcp-servers" : "tools", { ...item, state: nextState }); setItems(items.map((row) => row.registry_id === item.registry_id ? updated : row)); setMessage(`${item.name} set to ${nextState.toLowerCase()} in the workspace registry.`); }
     catch (error) { setLoadError(error.message || "Could not update inventory."); }
   }
+  async function remove(item) {
+    if (!item.registry_id || !window.confirm(`Remove ${item.name} from this inventory?`)) return;
+    try { await deleteInventoryItem(isServers ? "mcp-servers" : "tools", item.registry_id); setItems((current) => current.filter((row) => row.registry_id !== item.registry_id)); setMessage(`${item.name} removed from inventory.`); }
+    catch (error) { setLoadError(error.message || "Could not remove this item."); }
+  }
   return <>
-    <PageHeading eyebrow="AI INVENTORY · CATALOG" title={isServers ? "MCP servers" : "Agent tools"} description={isServers ? "Review the Model Context Protocol server catalog and sanction state for this workspace." : "Inspect tool scopes, risk levels and the server each tool is exposed through."} action={<span className="demo-indicator"><i /> SAMPLE CATALOG</span>} />
-    <div className="metric-grid three"><MetricCard icon={Server} label={isServers ? "MCP servers" : "Connected servers"} value={isServers ? MCP_SERVERS.length : new Set(DEMO_TOOLS.map((tool) => tool[1])).size} note="Illustrative catalog" /><MetricCard icon={Wrench} label="Tools inventoried" value={DEMO_TOOLS.length} note="Sample tool scopes" tone="violet" /><MetricCard icon={ShieldCheck} label="Sanctioned" value={rows.filter((row) => row.state === "Sanctioned").length} note="Current filter results" tone="green" /></div>
+    <PageHeading eyebrow="AI INVENTORY" title={isServers ? "MCP servers" : "Agent tools"} description={isServers ? "Register MCP server metadata and review whether each server is sanctioned for use." : "Register tool names and scopes so the action gateway can check tool requests against your inventory."} action={<button className="button primary" onClick={() => setShowAdd(true)}><Plus size={15} /> Add {isServers ? "server" : "tool"}</button>} />
+    <div className="metric-grid three"><MetricCard icon={Server} label={isServers ? "Server records" : "Tool records"} value={items.length} note="Workspace inventory" /><MetricCard icon={ShieldAlert} label="Needs review" value={items.filter((row) => row.state !== "Sanctioned").length} note="Not yet sanctioned" tone="amber" /><MetricCard icon={ShieldCheck} label="Sanctioned" value={items.filter((row) => row.state === "Sanctioned").length} note="Inventory metadata" tone="green" /></div>
     {loadError && <div className="info-banner inventory-notice"><AlertTriangle size={15} />{loadError}<button className="icon-action" onClick={() => setLoadError("")}><X size={14} /></button></div>}
     {message && <div className="info-banner inventory-notice"><CheckCircle2 size={15} />{message}<button className="icon-action" onClick={() => setMessage("")}><X size={14} /></button></div>}
-    <section className="surface inventory-surface"><div className="surface-heading"><div><h2>{isServers ? "MCP server registry" : "Tool registry"} ({rows.length})</h2><p>{isServers ? "Integration endpoint, category and sanction status" : "Tool access scope and review state"}</p></div><div className="integration-filter-tools"><select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}><option>All states</option><option>Sanctioned</option><option>Review</option></select><div className="search-field catalog-search"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isServers ? "Search servers" : "Search tools or servers"} /></div></div></div>
-      {isServers ? <div className="integration-catalog-grid">{rows.map((server) => <article className="surface integration-tile" key={server.name}><span className="server-avatar large">{server.icon}</span><div className="integration-tile-copy"><h3>{server.name}</h3><p>{server.category} · {server.tools} sample tools</p></div><Badge>{server.state}</Badge><button className="button secondary full-width" onClick={() => toggle(server)}>{server.state === "Sanctioned" ? "Move to review" : "Sanction server"}<ArrowUpRight size={13} /></button></article>)}</div> : <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>TOOL</th><th>MCP SERVER</th><th>ACCESS SCOPE</th><th>RISK</th><th>STATE</th><th /></tr></thead><tbody>{rows.map((tool) => <tr key={tool.id}><td><strong className="inventory-name">{tool.name}</strong><small className="inventory-sub">{tool.id}</small></td><td>{tool.server}</td><td>{tool.scope}</td><td><Badge>{tool.risk}</Badge></td><td><Badge>{tool.state}</Badge></td><td><button className="button mini secondary" onClick={() => toggle(tool)}>{tool.state === "Sanctioned" ? "Review" : "Sanction"}</button></td></tr>)}</tbody></table></div>}
-      <p className="inventory-disclaimer">Starter entries are illustrative. Catalog changes are saved in the backend workspace database; sanction state is inventory metadata and does not establish MCP connections or enforce controls on external services.</p>
+    <section className="surface inventory-surface"><div className="surface-heading"><div><h2>{isServers ? "MCP server inventory" : "Tool inventory"} ({rows.length})</h2><p>{isServers ? "Server name, category and review state" : "Tool name, server, access scope and risk"}</p></div><div className="integration-filter-tools"><select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}><option>All states</option><option>Sanctioned</option><option>Review</option></select><div className="search-field catalog-search"><Search size={15} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={isServers ? "Search servers" : "Search tools or servers"} /></div></div></div>
+      {!rows.length ? <EmptyState icon={isServers ? Server : Wrench} title={items.length ? "No matching inventory" : `No ${isServers ? "servers" : "tools"} registered`} description={items.length ? "Try another search or state filter." : "Add an inventory record to review. Tool records can be referenced by pre-execution checks."} action={!items.length && <button className="button primary small" onClick={() => setShowAdd(true)}><Plus size={14} /> Add {isServers ? "server" : "tool"}</button>} /> : isServers ? <div className="integration-catalog-grid">{rows.map((server) => <article className="surface integration-tile" key={server.registry_id}><span className="server-avatar large">{server.icon || server.name?.slice(0, 2).toUpperCase()}</span><div className="integration-tile-copy"><h3>{server.name}{SAMPLE_SERVER_NAMES.has(server.name) && <span className="sample-row-tag">Sample</span>}</h3><p>{server.category || "Uncategorized"}</p></div><Badge>{server.state || "Review"}</Badge><button className="button secondary full-width" onClick={() => toggle(server)}>{server.state === "Sanctioned" ? "Move to review" : "Mark sanctioned"}<ArrowUpRight size={13} /></button><button className="text-button inventory-remove" onClick={() => remove(server)}>Remove inventory record</button></article>)}</div> : <div className="table-scroll"><table className="data-table inventory-table"><thead><tr><th>TOOL</th><th>MCP SERVER</th><th>ACCESS SCOPE</th><th>RISK</th><th>STATE</th><th /></tr></thead><tbody>{rows.map((tool) => <tr key={tool.registry_id}><td><strong className="inventory-name">{tool.name}{SAMPLE_TOOL_NAMES.has(tool.name) && <span className="sample-row-tag">Sample</span>}</strong></td><td>{tool.server}</td><td>{tool.scope}</td><td><Badge>{tool.risk}</Badge></td><td><Badge>{tool.state || "Review"}</Badge></td><td><div className="agent-row-actions"><button className="button mini secondary" onClick={() => toggle(tool)}>{tool.state === "Sanctioned" ? "Move to review" : "Sanction"}</button><button className="button mini secondary" onClick={() => remove(tool)}>Remove</button></div></td></tr>)}</tbody></table></div>}
+      <p className="inventory-disclaimer">Tool sanction state is checked by the action policy endpoint. MCP server records are inventory metadata. Neither record creates a live MCP connection or executes a tool.</p>
     </section>
+    {showAdd && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAdd(false); }}><form className="event-modal register-modal" onSubmit={addItem}><div className="modal-heading"><div><span className="eyebrow">WORKSPACE INVENTORY</span><h2>Add {isServers ? "an MCP server" : "a tool"}</h2></div><button type="button" className="icon-action" onClick={() => setShowAdd(false)} aria-label="Close"><X size={18} /></button></div><label>{isServers ? "Server name" : "Tool name"}<input autoFocus required maxLength={160} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={isServers ? "e.g. Internal Knowledge MCP" : "e.g. search_documents"} /></label>{isServers ? <label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}><option>AI models</option><option>Knowledge</option><option>Communication</option><option>Developer tools</option><option>Data</option><option>Other</option></select></label> : <><label>Server name<input required maxLength={160} value={draft.server} onChange={(event) => setDraft({ ...draft, server: event.target.value })} placeholder="Name of registered server" /></label><label>Access scope<select value={draft.scope} onChange={(event) => setDraft({ ...draft, scope: event.target.value })}><option>Read</option><option>Write</option><option>Data access</option><option>External</option></select></label><label>Risk<select value={draft.risk} onChange={(event) => setDraft({ ...draft, risk: event.target.value })}><option>Low</option><option>Medium</option><option>High</option></select></label></>}<div className="modal-actions"><button className="button secondary" type="button" onClick={() => setShowAdd(false)}>Cancel</button><button className="button primary" type="submit"><Plus size={14} /> Add to inventory</button></div><p className="inventory-disclaimer">The entry starts in Review state. Sanctioning changes the gateway’s inventory decision; it does not connect to or execute the external service.</p></form></div>}
   </>;
 }
 
@@ -301,7 +286,7 @@ function Workflows({ onScan, loading, aiConfigured }) {
   </>;
 }
 
-function ActionGateway({ agents, events, onRefresh, currentUser }) {
+function ActionGateway({ agents, events, onRefresh, currentUser, onNavigate }) {
   const [form, setForm] = useState({ agent_id: "", action_type: "shell", target: "", justification: "" });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -324,7 +309,8 @@ function ActionGateway({ agents, events, onRefresh, currentUser }) {
     catch (err) { setError(err.message || "Could not save the review."); }
   }
   return <>
-    <PageHeading eyebrow="RUNTIME SECURITY" title="Agent action gateway" description="Evaluate shell, file, network, secret and tool requests before an agent executes them." action={<Badge>PRE-EXECUTION GATE</Badge>} />
+    <PageHeading eyebrow="RUNTIME SECURITY" title="Agent action gateway" description="Check shell, file, network, secret and tool intents before execution. The endpoint returns a decision; your agent runtime must honor it." action={<Badge>PRE-EXECUTION POLICY</Badge>} />
+    {!agents.length && <section className="surface action-empty-notice"><EmptyState icon={Bot} title="Register an agent to evaluate actions" description="The policy engine checks an action against the registered identity and tool inventory. No action is ever executed by this page." action={<button className="button primary small" onClick={() => onNavigate("Agents")}><Plus size={14} /> Open agent inventory</button>} /></section>}
     <div className="action-gateway-layout">
       <section className="surface action-evaluator"><div className="surface-heading"><div><h2>Evaluate an agent action</h2><p>Submit an intent to the policy engine before execution.</p></div><span className="metric-icon violet"><ShieldCheck size={18} /></span></div>
         <form onSubmit={evaluate}>
@@ -339,10 +325,10 @@ function ActionGateway({ agents, events, onRefresh, currentUser }) {
       </section>
       <aside className="surface action-policy-panel"><div className="surface-heading"><div><h2>Runtime guardrails</h2><p>Current decision behavior</p></div></div>
         {[["Destructive shell", "Blocked", "danger"], ["Read-only shell", "Policy allow", "success"], ["File writes", "Approval required", "warning"], ["Private / metadata network", "Blocked", "danger"], ["Outbound network", "Approval required", "warning"], ["Secrets", "Approval required", "warning"], ["Unsanctioned tools", "Blocked or review", "warning"]].map(([label, value]) => <div className="action-rule" key={label}><span>{label}</span><Badge>{value}</Badge></div>)}
-        <div className="info-banner"><Shield size={15} />Approval updates the audit decision only. No command or tool is executed by this demo.</div>
+        <div className="info-banner"><Shield size={15} />Approvals update the audit record only. Your agent runtime must separately perform any approved action.</div>
       </aside>
     </div>
-    <section className="surface approval-queue"><div className="surface-heading"><div><h2>Pending action approvals</h2><p>Requests held at the gateway until a reviewer decides.</p></div><span className="count-pill">{pending.length} pending</span></div>
+    <section className="surface approval-queue"><div className="surface-heading"><div><h2>Pending action reviews</h2><p>Approval-required events for your runtime to pause on until a reviewer decides.</p></div><span className="count-pill">{pending.length} pending</span></div>
       {!pending.length ? <EmptyState icon={CheckCircle2} title="No actions awaiting approval" description="File writes, outbound network requests, secret access and review-state tools appear here." /> : <div className="approval-list">{pending.map((event) => <article className="approval-row" key={event.id}><span className="investigation-severity warning"><Clock3 size={17} /></span><div className="investigation-main"><div className="investigation-title"><strong>{event.action_request.action_type} · {event.action_request.agent_id}</strong><Badge>Approval required</Badge></div><p className="approval-target">{event.action_request.target}</p><div className="investigation-meta"><span>Risk {event.risk_score}/100</span><span>{event.action_request.justification || "No justification supplied"}</span><span>Event #{event.id}</span></div></div><div className="investigation-actions"><button className="button mini secondary" onClick={() => review(event.id, "reject")}>Reject</button><button className="button mini primary" onClick={() => review(event.id, "approve")}>Approve</button></div></article>)}</div>}
     </section>
   </>;
@@ -494,7 +480,7 @@ function Policies() {
 
 function Analytics({ events, onNavigate }) {
   const total = events.length;
-  const blocked = events.filter((e) => ["BLOCKED", "OUTPUT_BLOCKED"].includes(String(e.status).toUpperCase())).length;
+  const blocked = events.filter((e) => ["BLOCKED", "OUTPUT_BLOCKED", "REJECTED"].includes(String(e.status).toUpperCase())).length;
   const allowed = events.filter((e) => ["ALLOWED", "ACTION_ALLOWED", "APPROVED"].includes(String(e.status).toUpperCase())).length;
   const flagged = events.filter((e) => ["FLAGGED", "AI_ERROR"].includes(String(e.status).toUpperCase())).length;
   const averageRisk = total ? Math.round(events.reduce((sum, event) => sum + Number(event.risk_score || 0), 0) / total) : 0;
@@ -553,7 +539,7 @@ function Workspace({ user, agents, events, onNavigate }) {
 export default function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const hostedDemo = window.location.protocol === "https:" && !["localhost", "127.0.0.1"].includes(window.location.hostname);
-  const [page, setPage] = useState("Dashboard"); const [events, setEvents] = useState([]); const [health, setHealth] = useState("checking"); const [aiProvider, setAiProvider] = useState({ configured: false, provider: "Groq", model: "", gatewayConfigured: false }); const [loading, setLoading] = useState(false); const [scanLoading, setScanLoading] = useState(false); const [scanResult, setScanResult] = useState(null); const [scanError, setScanError] = useState(""); const [chatMessages, setChatMessages] = useState([]); const [selectedEvent, setSelectedEvent] = useState(null); const [mobileNav, setMobileNav] = useState(false);
+  const [page, setPage] = useState("Getting Started"); const [events, setEvents] = useState([]); const [health, setHealth] = useState("checking"); const [aiProvider, setAiProvider] = useState({ configured: false, provider: "Groq", model: "", gatewayConfigured: false }); const [loading, setLoading] = useState(false); const [scanLoading, setScanLoading] = useState(false); const [scanResult, setScanResult] = useState(null); const [scanError, setScanError] = useState(""); const [chatMessages, setChatMessages] = useState([]); const [selectedEvent, setSelectedEvent] = useState(null); const [mobileNav, setMobileNav] = useState(false);
   const [agents, setAgents] = useState([]);
   const refresh = useCallback(async () => { setLoading(true); try { const [eventData, healthData] = await Promise.all([getSecurityEvents(), getBackendHealth()]); setEvents(eventData.events || []); setHealth(healthData.status === "healthy" ? "healthy" : "unavailable"); setAiProvider({ ...(healthData.ai_provider || { configured: false, provider: "Groq", model: "" }), gatewayConfigured: Boolean(healthData.openai_compatible_gateway?.configured) }); } catch { setHealth("unavailable"); } finally { setLoading(false); } }, []);
   useEffect(() => {
@@ -562,16 +548,8 @@ export default function App() {
     let active = true;
     (async () => {
       try {
-        let rows = await getInventory("agents");
-        const existingNames = new Set(rows.map((row) => row.name));
-        for (const agent of DEMO_AGENTS) if (!existingNames.has(agent.name)) await createInventoryItem("agents", agent);
-        rows = await getInventory("agents");
+        const rows = await getInventory("agents");
         if (active) setAgents(rows);
-        const registeredTools = await getInventory("tools");
-        const existingTools = new Set(registeredTools.map((tool) => tool.name));
-        for (const [name, server, access, risk] of DEMO_TOOLS) {
-          if (!existingTools.has(name)) await createInventoryItem("tools", { name, server, access, risk, state: risk === "Low" ? "Sanctioned" : "Review" });
-        }
       } catch (error) { console.error("Could not load agent inventory", error); }
     })();
     return () => { active = false; };
@@ -584,10 +562,10 @@ export default function App() {
     if (page === "Getting Started") return <GettingStarted health={health} aiProvider={aiProvider} gatewayConfigured={aiProvider.gatewayConfigured} onNavigate={navigate} />;
     if (page === "Profile") return <Profile user={user} onSignOut={logout} />;
     if (page === "My Workspace") return <Workspace user={user} agents={agents} events={events} onNavigate={navigate} />;
-    if (page === "Dashboard") return <Dashboard events={events} health={health} onNavigate={navigate} onRefresh={refresh} loading={loading} agents={agents} currentUser={user} />;
+    if (page === "Dashboard") return <Dashboard events={events} health={health} onNavigate={navigate} onRefresh={refresh} loading={loading} />;
     if (page === "Agents") return <AgentDirectory agents={agents} setAgents={setAgents} onNavigate={navigate} />;
     if (page === "MCP Servers" || page === "Tools") return <IntegrationCatalog kind={page} />;
-    if (page === "Action Gateway") return <ActionGateway agents={agents} events={events} onRefresh={refresh} currentUser={user} />;
+    if (page === "Action Gateway") return <ActionGateway agents={agents} events={events} onRefresh={refresh} currentUser={user} onNavigate={navigate} />;
     if (page === "Investigations") return <Investigations events={events} onSelect={setSelectedEvent} />;
     if (page === "Workflows") return <Workflows onScan={runScan} loading={scanLoading} aiConfigured={aiProvider.configured} />;
     if (page === "Playground") return <Playground onScan={runScan} loading={scanLoading} result={scanResult} error={scanError} setError={setScanError} messages={chatMessages} setMessages={setChatMessages} clearScan={() => setScanResult(null)} aiConfigured={aiProvider.configured} aiModel={aiProvider.model} backendHealth={health} />;
