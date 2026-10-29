@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, EmailStr
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -60,7 +61,15 @@ def login(
     form: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.username == form.username).first()
+    # People often enter the email they registered with on the sign-in screen.
+    # Accept either identifier, without making username matching case-sensitive.
+    identifier = form.username.strip().lower()
+    user = db.query(User).filter(
+        or_(
+            func.lower(User.username) == identifier,
+            func.lower(User.email) == identifier,
+        )
+    ).first()
 
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(

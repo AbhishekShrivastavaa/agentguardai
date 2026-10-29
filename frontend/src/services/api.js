@@ -66,16 +66,28 @@ export async function loginUser(username, password) {
     throw new Error(errorMessage(data, "Login failed"));
   }
 
-  localStorage.setItem("agentguard_token", data.access_token);
+  if (typeof data.access_token !== "string" || !data.access_token) {
+    throw new Error("Login succeeded, but the server did not return a session token.");
+  }
+
+  try {
+    localStorage.setItem("agentguard_token", data.access_token);
+    if (data.user && typeof data.user === "object") {
+      localStorage.setItem("agentguard_user", JSON.stringify(data.user));
+    }
+  } catch {
+    throw new Error("Your browser could not save the sign-in session. Enable site storage and try again.");
+  }
   return data;
 }
 
-export async function getCurrentUser() {
-  return apiRequest("/auth/me");
+export async function getCurrentUser(options = {}) {
+  return apiRequest("/auth/me", options);
 }
 
 export function logoutUser() {
   localStorage.removeItem("agentguard_token");
+  localStorage.removeItem("agentguard_user");
 }
 
 // AI Security Gateway

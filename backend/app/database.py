@@ -9,7 +9,9 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 # Database configuration
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "sqlite:///./agentguard.db"
+    # Resolve the default beside the backend package so starting Uvicorn from
+    # a different working directory cannot silently select another database.
+    f"sqlite:///{(Path(__file__).resolve().parents[1] / 'agentguard.db').as_posix()}"
 )
 
 # SQLite configuration

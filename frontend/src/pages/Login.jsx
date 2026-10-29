@@ -34,8 +34,8 @@ export default function Login() {
     <p className="auth-subtitle">{isRegister ? "Create a workspace to test prompts, set security policies, and review gateway decisions." : "Sign in to inspect AI requests, manage security policies, and review your audit trail."}</p>
     <div className="auth-benefits"><div><ShieldCheck size={15} /><span>Inspect prompts and sensitive data</span></div><div><Activity size={15} /><span>Apply policies and review decisions</span></div><div><Code2 size={15} /><span>Start in the browser; integrate by API later</span></div></div>
     <form onSubmit={handleSubmit}>
-      <label htmlFor="username">Username</label>
-      <input id="username" value={username} onChange={(e) => setUsername(e.target.value)} minLength={3} maxLength={50} required autoComplete="username" placeholder="Enter your username" />
+      <label htmlFor="username">Username or email</label>
+      <input id="username" value={username} onChange={(e) => setUsername(e.target.value)} minLength={3} maxLength={254} required autoComplete="username" placeholder="Enter your username or email" />
       {isRegister && <><label htmlFor="email">Email address</label><input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@example.com" /></>}
       <label htmlFor="password">Password</label>
       <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} maxLength={128} required autoComplete={isRegister ? "new-password" : "current-password"} placeholder="Enter your password" />
