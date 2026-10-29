@@ -42,6 +42,14 @@ Copy-Item .env.example .env
 
 Set `JWT_SECRET_KEY` to a long random value. Add `GROQ_API_KEY` only if you want live model responses. Set `AGENTGUARD_API_KEY` if you plan to call the OpenAI-compatible proxy. Keep these backend secrets out of the frontend and Git.
 
+The prompt classifier trains locally from the labeled examples in `app/security_engine/training_data.jsonl`; it does not send prompts to an LLM provider. To retrain the artifact and print holdout metrics, run:
+
+```powershell
+python train_security_model.py
+```
+
+The small demonstration dataset is not a substitute for representative, independently labeled evaluation data.
+
 ```powershell
 uvicorn app.main:app --reload --port 8001
 ```

@@ -11,7 +11,7 @@ from typing import Any
 
 
 MODEL_PATH = Path(__file__).with_name("security_model.json")
-MODEL_THRESHOLD = 0.90
+MODEL_THRESHOLD = 0.70
 
 
 def text_features(text: str) -> list[str]:

@@ -10,12 +10,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from app.security_engine.ml_classifier import fit_model, predict_attack_probability  # noqa: E402
+from app.security_engine.ml_classifier import (  # noqa: E402
+    MODEL_THRESHOLD,
+    fit_model,
+    predict_attack_probability,
+)
 
 
 DATA_PATH = ROOT / "app" / "security_engine" / "training_data.jsonl"
 MODEL_PATH = ROOT / "app" / "security_engine" / "security_model.json"
-THRESHOLD = 0.90
+THRESHOLD = MODEL_THRESHOLD
 
 
 def load_data() -> list[dict[str, str]]:
@@ -63,14 +67,18 @@ def main() -> None:
     total = max(1, len(test))
     precision = true_positive / max(1, true_positive + false_positive)
     recall = true_positive / max(1, true_positive + false_negative)
+    specificity = true_negative / max(1, true_negative + false_positive)
+    f1 = 2 * precision * recall / max(precision + recall, 1e-12)
     accuracy = (true_positive + true_negative) / total
+    balanced_accuracy = (recall + specificity) / 2
 
     final_model = fit_model(rows)
     MODEL_PATH.write_text(json.dumps(final_model, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     print(f"Algorithm: {final_model['algorithm']}")
     print(f"Dataset: {len(rows)} examples ({sum(r['label'] == 'attack' for r in rows)} attack, {sum(r['label'] == 'benign' for r in rows)} benign)")
-    print(f"Holdout: {len(test)} examples; accuracy={accuracy:.3f}, precision={precision:.3f}, recall={recall:.3f}")
+    print(f"Threshold: {THRESHOLD:.2f}")
+    print(f"Holdout: {len(test)} examples; accuracy={accuracy:.3f}, balanced_accuracy={balanced_accuracy:.3f}, precision={precision:.3f}, recall={recall:.3f}, f1={f1:.3f}")
     print(f"Confusion: TP={true_positive} FP={false_positive} TN={true_negative} FN={false_negative}")
     print(f"Trained artifact: {MODEL_PATH}")
 
