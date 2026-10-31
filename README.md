@@ -108,6 +108,14 @@ The Blueprint uses SQLite on the free service plan, so user, policy, inventory a
 - Text-only proxy requests are inspected. Image payloads and streaming responses fail closed or are rejected rather than inspected.
 - The demo should use synthetic prompts, test accounts, and non-sensitive data only.
 
+## Frontend agent skills
+
+Workspace-local skills are available under `.github/skills/`:
+
+- `emil-design-eng` for interaction design, component details, and purposeful motion.
+- `taste` for coherent, distinctive visual direction and design decisions.
+- `impeccable` for focused UI quality, accessibility, and responsive-design reviews.
+
 ## Repository
 
 [AbhishekShrivastavaa/agentguardai](https://github.com/AbhishekShrivastavaa/agentguardai)
